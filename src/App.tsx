@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
-import type { CSSProperties, FormEvent, ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ForkKnife, List, MapPin, Moon, Phone, Sun, X } from '@phosphor-icons/react';
 import { branches, dishes } from './content';
 import { useTheme } from './theme';
@@ -45,8 +45,24 @@ class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [category, setCategory] = useState('Tất cả');
-  const [entered, setEntered] = useState(false);
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  const [mobileTourEnabled, setMobileTourEnabled] = useState(false);
   const [chapter, setChapter] = useState(0);
+  const tourToggle = useRef<HTMLButtonElement>(null);
+  const chapterDetails = useRef<HTMLDetailsElement>(null);
+  const requestedChapter = useRef(0);
+  const sceneEnabled = !mobile || mobileTourEnabled;
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const change = () => {
+      setMobile(media.matches);
+      setMobileTourEnabled(false);
+      setChapter(0); requestedChapter.current = 0;
+    };
+    media.addEventListener('change', change);
+    return () => media.removeEventListener('change', change);
+  }, []);
   const hero = useRef<HTMLElement>(null);
   const [theme, setTheme] = useTheme();
   const root = useRef<HTMLDivElement>(null);
@@ -82,12 +98,16 @@ export default function App() {
   useEffect(() => {
     const overlay = hero.current?.querySelector<HTMLElement>('.story-overlay');
     if (overlay) overlay.scrollTop = 0;
-    if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[hidden]')) {
-      hero.current?.querySelector<HTMLButtonElement>(`.chapter-nav button:nth-of-type(${chapter + 1})`)?.focus({ preventScroll: true });
+    const details = chapterDetails.current;
+    if (details) details.open = false;
+    if (document.activeElement instanceof HTMLElement && details?.contains(document.activeElement)) {
+      hero.current?.querySelector<HTMLElement>('.chapter-details summary')?.focus({ preventScroll: true });
     }
   }, [chapter]);
 
   const seek = (index: number) => {
+    index = Math.max(0, Math.min(chapters.length - 1, index));
+    requestedChapter.current = index;
     setChapter(index);
     if (hero.current) hero.current.dataset.journey = chapters[index];
     hero.current?.dispatchEvent(new CustomEvent('storyseek', { detail: { index } }));
@@ -110,23 +130,40 @@ export default function App() {
     </header>
 
     <main id="main">
-      <section ref={hero} id="home" className="hero cinematic-story" aria-label="Hành trình bảy chương tại Ngọc Hiếu">
-        <div className="hero-visual"><SceneBoundary><Suspense fallback={<div className="scene-loading" role="status"><span>Đang mở cửa nhà hàng...</span></div>}><RestaurantScene theme={theme} entered={entered} onEntered={() => setEntered(false)} /></Suspense></SceneBoundary></div>
-        <a className="story-skip" href="#cau-chuyen">Bỏ qua hành trình <ArrowDownRight size={18} /></a>
-        <div className="story-overlay" onWheel={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()}>
-          <article className="chapter-panel" data-chapter={chapter} style={{ animationName: chapter % 2 ? 'chapter-arrive' : 'chapter-return' }} aria-labelledby={`chapter-title-${chapter}`}>
-            <span className="eyebrow">0{chapter + 1} / 07 · {chapterLabels[chapter]}</span>
-            {chapter === 0 ? <><h1 id="chapter-title-0" aria-label="Mời bạn ghé vào. Ngọc Hiếu."><span className="slogan-line" aria-hidden="true">{'Mời bạn ghé vào.'.split('').map((letter, index) => <span key={index} style={{ '--letter': index } as CSSProperties}>{letter === ' ' ? '\u00a0' : letter}</span>)}</span><span className="slogan-brand">Ngọc Hiếu.</span></h1><p>Giữa nhịp phố Hà Nội, có một chiếc chảo nóng đang chờ.</p><button className="text-link" onClick={() => seek(1)}>Bước vào câu chuyện <ArrowRight size={20} /></button><small>Cuộn để khám phá · Chọn chương để đi thẳng.</small></> : null}
-            {chapter === 1 ? <><h2 id="chapter-title-1">Một góc quen.<br /><span>Một cuộc hẹn.</span></h2><figure className="chapter-photo"><img src="/images/official-hang-cot-reference.jpg" alt="Mặt tiền nhà hàng Ngọc Hiếu Hàng Cót, ảnh chính thức" width="700" height="935" /><figcaption>Ngọc Hiếu Hàng Cót · Ảnh từ website nhà hàng</figcaption></figure><p>Không gian thật, những bữa ăn thật. Mời bạn ghé cơ sở mình yêu thích.</p></> : null}
-            {chapter === 2 ? <><h2 id="chapter-title-2">Chảo nóng.<br /><span>Vị thân quen.</span></h2><img className="signature-photo" src={`/images/${dishes[0].image}`} alt={dishes[0].name} width="700" height="800" /><h3>{dishes[0].name}</h3><strong className="chapter-price">{dishes[0].price.toLocaleString('vi-VN')} ₫</strong><p>Chảo gang hình bò, bánh mì nhà làm. Giá tham khảo từ website; gọi để xác nhận giá và đặt món.</p><a className="button" href="tel:0933446996">Gọi đặt món <Phone size={18} /></a></> : null}
-            {chapter === 3 ? <><h2 id="chapter-title-3">Sau bữa ăn,<br /><span>là lời chia sẻ.</span></h2><figure className="chapter-photo"><img src="/images/ngoc-hieu-social-official-atmosphere-family.jpg" alt="Không gian nhà hàng trong bài đăng chính thức của Ngọc Hiếu" width="700" height="770" /><figcaption>Ảnh do nhà hàng đăng, không phải ảnh đánh giá của khách.</figcaption></figure><p>Khám phá các bài đăng và trao đổi trên kênh chính thức. Chúng tôi không hiển thị điểm sao hay trích dẫn chưa được xác minh.</p><a className="text-link" href="https://www.facebook.com/bittetngochieu" target="_blank" rel="noreferrer">Xem trên Facebook <ArrowUpRight size={18} /></a></> : null}
-            {chapter === 4 ? <><h2 id="chapter-title-4">Lật từng trang.<br /><span>Chọn món bạn thích.</span></h2><p>Bít tết, mỳ Ý và những món ăn cho cuộc hẹn hôm nay. Quyển thực đơn mở ra khi bạn sẵn sàng.</p><a className="button story-menu-link" href="/thuc-don">Mở quyển thực đơn <ArrowUpRight size={20} /></a><small>Bạn chủ động mở thực đơn, hành trình không tự chuyển trang.</small></> : null}
-            <div hidden={chapter !== 5}><h2 id="chapter-title-5">Giữ một lời hẹn.</h2><BookingForm /><details className="story-visit"><summary>Cơ sở, chỉ đường & giờ tham khảo</summary><p>Giờ trên trang hệ thống đã lưu: 07:00-22:00. Vui lòng gọi xác nhận giờ hiện tại và ưu đãi trước khi ghé.</p><a href="https://ngochieu.com.vn/he-thong-chi-nhanh.html" target="_blank" rel="noreferrer">Nguồn giờ phục vụ <ArrowUpRight size={14} /></a>{branches.map((branch, index) => <a key={branch.address} href={branchMaps[index]} target="_blank" rel="noreferrer"><MapPin size={16} />{branch.address} · {branch.area}</a>)}</details></div>
-            {chapter === 6 ? <><img className="finale-logo" src="/images/ngoc-hieu-facebook-profile.jpg" alt="Logo Ngọc Hiếu" width="96" height="96" /><h2 id="chapter-title-6">Phố vẫn đi.<br /><span>Mình ngồi lại.</span></h2><p>Hẹn nhau một bữa ngon ở Ngọc Hiếu.</p><button className="button" onClick={() => seek(5)}>Hẹn bàn tại Ngọc Hiếu <ArrowUpRight size={18} /></button><a className="text-link" href="#cau-chuyen">Khám phá tiếp <ArrowDownRight size={18} /></a></> : null}
-          </article>
-        </div>
-        <p className="story-disclaimer">Không gian 3D minh họa · Ảnh thật được ghi nguồn riêng.</p>
-        <nav className="chapter-nav" aria-label="Các chương câu chuyện"><div className="story-progress" aria-hidden="true" />{chapterLabels.map((label, index) => <button key={label} type="button" aria-label={`Chương ${index + 1}: ${label}`} aria-current={chapter === index ? 'step' : undefined} onClick={() => seek(index)}><span>0{index + 1}</span><span className="chapter-nav-label">{label}</span></button>)}</nav>
+      <section ref={hero} id="home" data-journey={chapters[chapter]} className={`hero ${sceneEnabled ? 'cinematic-story' : 'mobile-home'}${mobile && mobileTourEnabled ? ' mobile-tour' : ''}`} aria-label={sceneEnabled ? 'Hành trình bảy chương tại Ngọc Hiếu' : 'Nhà hàng Ngọc Hiếu'}>
+        {mobile && !mobileTourEnabled ? <div className="mobile-hero">
+          <div className="mobile-hero-copy"><span className="eyebrow">Bít tết · Từ 1988</span><h1>Hẹn nhau ở<br /><span>Ngọc Hiếu.</span></h1><p>Chảo nóng trên bàn. Một bữa ngon giữa lòng Hà Nội.</p><div className="mobile-hero-actions"><a className="button" href="/thuc-don">Xem menu <ArrowUpRight size={20} /></a><a className="text-link" href="#dat-ban">Đặt bàn <ArrowRight size={20} /></a></div></div>
+          <figure className="mobile-hero-photo"><img src="/images/official-hang-cot-reference.jpg" alt="Mặt tiền Ngọc Hiếu Hàng Cót, ảnh chính thức của nhà hàng" width="700" height="935" fetchPriority="high" /><figcaption>Ngọc Hiếu Hàng Cót · Ảnh từ website nhà hàng</figcaption></figure>
+          <div className="mobile-tour-invite"><div><strong>Một vòng quanh quán</strong><p>Trải nghiệm 3D minh họa, chỉ tải khi bạn chọn.</p></div><button ref={tourToggle} className="text-link" onClick={() => { setChapter(0); requestedChapter.current = 0; setMobileTourEnabled(true); }}>Khám phá quán <ArrowRight size={20} /></button></div>
+        </div> : null}
+        {sceneEnabled ? <>
+          <div className="hero-visual"><SceneBoundary><Suspense fallback={<div className="scene-loading" role="status"><span>Đang mở cửa nhà hàng...</span></div>}><RestaurantScene theme={theme} tourMode={mobile ? 'steps' : 'scroll'} /></Suspense></SceneBoundary></div>
+          {mobile ? <button className="story-skip tour-close" autoFocus onClick={() => { setMobileTourEnabled(false); setChapter(0); requestedChapter.current = 0; requestAnimationFrame(() => tourToggle.current?.focus({ preventScroll: true })); }}>Đóng khám phá <X size={18} /></button> : <a className="story-skip" href="#cau-chuyen">Bỏ qua hành trình <ArrowDownRight size={18} /></a>}
+          {mobile ? <nav className="tour-steps" aria-label="Các chương câu chuyện"><button type="button" disabled={chapter === 0} onClick={() => seek(requestedChapter.current - 1)}>Chương trước</button><span aria-live="polite">{chapter + 1} / 7</span><button type="button" disabled={chapter === chapters.length - 1} onClick={() => seek(requestedChapter.current + 1)}>Chương tiếp</button></nav> : null}
+          <div className="story-overlay" onWheel={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()}>
+            <article className="chapter-panel" data-chapter={chapter} aria-labelledby={`chapter-title-${chapter}`}>
+              <span className="eyebrow">0{chapter + 1} / 07 · {chapterLabels[chapter]}</span>
+              <h1 id={`chapter-title-${chapter}`}>{['Mời bạn ghé Ngọc Hiếu.', 'Một góc quen. Một cuộc hẹn.', 'Chảo nóng. Vị thân quen.', 'Sau bữa ăn, là lời chia sẻ.', 'Chọn món bạn thích.', 'Giữ một lời hẹn.', 'Phố vẫn đi. Mình ngồi lại.'][chapter]}</h1>
+              {chapter === 0 ? <button className="button" onClick={() => seek(1)}>Bước vào câu chuyện <ArrowRight size={18} /></button> : null}
+              {chapter === 1 ? <a className="button" href="#he-thong">Tìm cơ sở <MapPin size={18} /></a> : null}
+              {chapter === 2 ? <a className="button" href="tel:0933446996">Gọi đặt món <Phone size={18} /></a> : null}
+              {chapter === 3 ? <a className="button" href="https://www.facebook.com/bittetngochieu" target="_blank" rel="noreferrer">Xem trên Facebook <ArrowUpRight size={18} /></a> : null}
+              {chapter === 4 ? <a className="button story-menu-link" href="/thuc-don">Mở quyển thực đơn <ArrowUpRight size={18} /></a> : null}
+              {chapter >= 5 ? <a className="button" href="#dat-ban">Đặt bàn tại Ngọc Hiếu <ArrowUpRight size={18} /></a> : null}
+              <details ref={chapterDetails} className="chapter-details"><summary>Xem thêm<span className="sr-only"> về {chapterLabels[chapter]}</span></summary>
+                {chapter === 0 ? <p>Giữa nhịp phố Hà Nội, có một chiếc chảo nóng đang chờ. {mobile ? 'Chọn chương trước hoặc tiếp theo để khám phá.' : 'Cuộn để khám phá hoặc chọn chương để đi thẳng.'}</p> : null}
+                {chapter === 1 ? <><figure className="chapter-photo"><img src="/images/official-hang-cot-reference.jpg" alt="Mặt tiền nhà hàng Ngọc Hiếu Hàng Cót, ảnh chính thức" width="700" height="935" loading="lazy" /><figcaption>Ngọc Hiếu Hàng Cót · Ảnh từ website nhà hàng</figcaption></figure><p>Không gian thật, những bữa ăn thật. Mời bạn ghé cơ sở mình yêu thích.</p></> : null}
+                {chapter === 2 ? <><img className="signature-photo" src={`/images/${dishes[0].image}`} alt={dishes[0].name} width="700" height="800" loading="lazy" /><h3>{dishes[0].name}</h3><strong className="chapter-price">{dishes[0].price.toLocaleString('vi-VN')} ₫</strong><p>Chảo gang hình bò, bánh mì nhà làm. Giá tham khảo từ website; gọi để xác nhận giá và đặt món.</p></> : null}
+                {chapter === 3 ? <><figure className="chapter-photo"><img src="/images/ngoc-hieu-social-official-atmosphere-family.jpg" alt="Không gian nhà hàng trong bài đăng chính thức của Ngọc Hiếu" width="700" height="770" loading="lazy" /><figcaption>Ảnh do nhà hàng đăng, không phải ảnh đánh giá của khách.</figcaption></figure><p>Khám phá các bài đăng và trao đổi trên kênh chính thức. Chúng tôi không hiển thị điểm sao hay trích dẫn chưa được xác minh.</p></> : null}
+                {chapter === 4 ? <p>Bít tết, mỳ Ý và những món ăn cho cuộc hẹn hôm nay. Bạn chủ động mở thực đơn, hành trình không tự chuyển trang.</p> : null}
+                {chapter === 5 ? <div className="story-visit"><p>Giờ trên trang hệ thống đã lưu: 07:00-22:00. Vui lòng gọi xác nhận giờ hiện tại và ưu đãi trước khi ghé.</p><a href="https://ngochieu.com.vn/he-thong-chi-nhanh.html" target="_blank" rel="noreferrer">Nguồn giờ phục vụ <ArrowUpRight size={14} /></a>{branches.map((branch, index) => <a key={branch.address} href={branchMaps[index]} target="_blank" rel="noreferrer"><MapPin size={16} />{branch.address} · {branch.area}</a>)}</div> : null}
+                {chapter === 6 ? <p>Hẹn nhau một bữa ngon ở Ngọc Hiếu.</p> : null}
+              </details>
+            </article>
+          </div>
+          <p className="story-disclaimer">Không gian 3D minh họa · Ảnh thật được ghi nguồn riêng.</p>
+          {!mobile ? <nav className="chapter-nav" aria-label="Các chương câu chuyện"><div className="story-progress" aria-hidden="true" />{chapterLabels.map((label, index) => <button key={label} type="button" aria-label={`Chương ${index + 1}: ${label}`} aria-current={chapter === index ? 'step' : undefined} onClick={() => seek(index)}><span>0{index + 1}</span><span className="chapter-nav-label">{label}</span></button>)}</nav> : null}
+        </> : null}
       </section>
 
       <section className="welcome wrap reveal" aria-label="Lời chào từ Ngọc Hiếu"><span className="welcome-symbol"><ForkKnife size={28} weight="light" /></span><p>Chảo nóng trên bàn.<br /><strong>Câu chuyện bắt đầu.</strong></p><a href="#cau-chuyen" className="round-link" aria-label="Khám phá câu chuyện Ngọc Hiếu"><ArrowDownRight size={28} /></a></section>
@@ -156,9 +193,10 @@ export default function App() {
 
       <section id="he-thong" className="branches wrap reveal"><h2>Ghé Ngọc Hiếu<br /><span>gần bạn.</span></h2><div className="branch-grid">{branches.map(branch => <a className="branch" key={branch.address} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`Bít Tết Ngọc Hiếu ${branch.address} Hà Nội`)}`} target="_blank" rel="noreferrer"><MapPin size={23} weight="light" /><div><h3>{branch.address}</h3><p>{branch.area}</p></div><ArrowUpRight size={20} /></a>)}</div></section>
 
-      <section id="dat-ban" className="booking wrap reveal"><div><span className="eyebrow">Hẹn ở Ngọc Hiếu nhé</span><h2>Bữa ngon tiếp theo,<br />có bạn.</h2><p>Gọi nhà hàng để chọn cơ sở và xác nhận bàn của bạn.</p></div><a className="booking-phone" href="tel:0933446996"><Phone size={28} weight="light" /><span>Đặt bàn<strong>0933 446 996</strong></span><ArrowUpRight size={27} /></a></section>
+      <section id="dat-ban" className="booking wrap reveal"><div><span className="eyebrow">Hẹn ở Ngọc Hiếu nhé</span><h2>Bữa ngon tiếp theo,<br />có bạn.</h2><p>Gọi nhà hàng để chọn cơ sở và xác nhận bàn của bạn.</p></div><a className="booking-phone" href="tel:0933446996"><Phone size={28} weight="light" /><span>Đặt bàn<strong>0933 446 996</strong></span><ArrowUpRight size={27} /></a><details className="booking-disclosure"><summary>Gửi yêu cầu đặt bàn qua email</summary><BookingForm /></details></section>
     </main>
 
+    <nav className="mobile-bottom-nav" aria-label="Thao tác nhanh"><a href="/thuc-don"><ForkKnife size={21} /><span>Menu</span></a><a href="tel:0933446996"><Phone size={21} /><span>Gọi</span></a><a href="#dat-ban"><ArrowUpRight size={21} /><span>Đặt bàn</span></a></nav>
     <aside className="persistent-booking" aria-label="Đặt bàn nhanh"><a className="button" href="#dat-ban">Đặt bàn <ArrowUpRight size={18} /></a><a className="persistent-call" href="tel:0933446996"><Phone size={18} /><span>0933 446 996</span></a></aside>
     <footer id="lien-he" className="footer wrap"><div className="footer-main"><a className="footer-brand" href="#home">Ngọc Hiếu<span>Bít tết & những cuộc hẹn</span></a><a href="mailto:bittetngochieu@gmail.com">bittetngochieu@gmail.com <ArrowUpRight size={18} /></a><a href="https://www.facebook.com/bittetngochieu/" target="_blank" rel="noreferrer">Facebook <ArrowUpRight size={18} /></a></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Bít Tết Ngọc Hiếu</span><span>Hẹn nhau một bữa ngon.</span></div></footer>
   </div>;

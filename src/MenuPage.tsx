@@ -33,10 +33,16 @@ function DishDialog({ dish, onClose }: { dish: MenuDish; onClose: () => void }) 
   useEffect(() => {
     const previous = document.activeElement;
     const element = dialog.current;
+    const scrollY = window.scrollY;
+    const bodyStyle = document.body.style;
+    const saved = { position: bodyStyle.position, top: bodyStyle.top, width: bodyStyle.width, overflow: bodyStyle.overflow };
     element?.showModal();
+    Object.assign(bodyStyle, { position: 'fixed', top: `-${scrollY}px`, width: '100%', overflow: 'hidden' });
     return () => {
       element?.close();
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      Object.assign(bodyStyle, saved);
+      window.scrollTo({ top: scrollY, behavior: 'instant' });
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
   return <dialog ref={dialog} className="notebook-dialog" aria-labelledby="dish-dialog-title" aria-describedby="dish-dialog-description" onClose={event => { if (!event.currentTarget.open) onClose(); }} onCancel={event => { event.preventDefault(); onClose(); }}>
@@ -55,7 +61,10 @@ function DishDialog({ dish, onClose }: { dish: MenuDish; onClose: () => void }) 
 
 export default function MenuPage() {
   const [theme, setTheme] = useTheme();
-  const mobile = useSyncExternalStore(subscribe, getMobile, () => false);
+  const mobile = useSyncExternalStore(subscribe, getMobile, () => true);
+  const [mobileBook, setMobileBook] = useState(false);
+  const showBook = !mobile || mobileBook;
+  const [previousShowBook, setPreviousShowBook] = useState(showBook);
   const reduced = useSyncExternalStore(subscribeReduced, getReduced, () => true);
   const [selected, setSelected] = useState(0);
   const [target, setTarget] = useState(0);
@@ -67,6 +76,13 @@ export default function MenuPage() {
   const book = useRef<MenuBookHandle>(null);
   const reader = useRef<HTMLElement>(null);
   const audio = useRef<AudioContext | null>(null);
+  if (previousShowBook !== showBook) {
+    setPreviousShowBook(showBook);
+    setSelected(0);
+    setTarget(0);
+    setSceneBusy(false);
+    setLoading(showBook && !failed);
+  }
   const size = mobile ? 1 : 2;
   const first = Math.floor(selected / size) * size;
   const destination = Math.floor(target / size) * size;
@@ -76,10 +92,10 @@ export default function MenuPage() {
   const next = first + Math.sign(destination - first) * size;
 
   useEffect(() => {
-    if (!moving) return;
+    if (!moving || !showBook) return;
     const timer = window.setTimeout(() => setSelected(next), reduced ? 0 : 720);
     return () => window.clearTimeout(timer);
-  }, [moving, next, reduced]);
+  }, [moving, next, reduced, showBook]);
 
   useEffect(() => () => { void audio.current?.close(); }, []);
 
@@ -159,8 +175,23 @@ export default function MenuPage() {
       <div className="notebook-actions"><button type="button" className="icon-button theme-toggle" aria-label={theme === 'light' ? 'Bật giao diện tối' : 'Bật giao diện sáng'} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={19} /> : <Sun size={19} />}</button><a href="/#dat-ban" className="notebook-booking">Đặt bàn <span aria-hidden="true">↗</span></a></div>
     </header>
     <main>
-      <div className="notebook-heading"><h1>Thực đơn</h1><p>Lật từng trang. Chọn một món quen.</p></div>
-      <section ref={reader} id="notebook" className="notebook-reader" aria-label="Sổ thực đơn" aria-describedby="notebook-help" tabIndex={0} onKeyDown={event => {
+      <div className="notebook-heading"><h1>Thực đơn</h1><p>{showBook ? 'Lật từng trang. Chọn một món quen.' : 'Chọn món quen, gọi nhà hàng để đặt.'}</p></div>
+      {mobile && <div className="notebook-view-switch"><button type="button" aria-pressed={mobileBook} aria-controls="notebook" onClick={() => setMobileBook(value => !value)}>{mobileBook ? 'Xem danh sách món' : 'Xem sách 3D'}</button><span>{mobileBook ? 'Có thể trở về danh sách bất cứ lúc nào.' : `${menuDishes.length} món · Không cần tải 3D`}</span></div>}
+      {!showBook ? <section id="notebook" className="notebook-menu-list" aria-label="Danh sách thực đơn" tabIndex={-1}>
+        <nav className="notebook-list-nav" aria-label="Danh mục món ăn">{menuCategories.map(category => <a key={category.name} href={`#menu-category-${category.page}`}>{category.name}</a>)}</nav>
+        {menuCategories.map(category => <section className="notebook-list-category" key={category.name} aria-labelledby={`menu-category-${category.page}`}>
+          <h2 id={`menu-category-${category.page}`} tabIndex={-1}>{category.name}</h2>
+          {menuDishes.filter(item => item.category === category.name).map(item => <article className="notebook-list-dish" key={item.id} aria-labelledby={`menu-dish-${item.id}`}>
+            <img src={item.image} alt={item.name} width="700" height="560" loading={item === menuDishes[0] ? 'eager' : 'lazy'} decoding="async" />
+            <div className="notebook-list-copy">
+              {item.badge && <span className="notebook-badge">{item.badge}</span>}
+              <h3 id={`menu-dish-${item.id}`}>{item.name}</h3>
+              <p>{item.description}</p>
+              <div className="notebook-list-order"><strong className="notebook-price">{formatMenuPrice(item.price)}</strong><button type="button" className="notebook-order" aria-label={`Đặt món ${item.name}`} onClick={() => selectDish(item.id)}>Đặt món <span aria-hidden="true">↗</span></button></div>
+            </div>
+          </article>)}
+        </section>)}
+      </section> : <section ref={reader} id="notebook" className="notebook-reader" aria-label="Sổ thực đơn" aria-describedby="notebook-help" tabIndex={0} onKeyDown={event => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || dish) return;
         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); turn(event.key === 'ArrowLeft' ? -1 : 1); }
         if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); goTo(event.key === 'Home' ? 0 : menuPages.length - 1); }
@@ -178,7 +209,8 @@ export default function MenuPage() {
         <p id="notebook-help" className="notebook-help">{failed ? 'Dùng nút lật trang hoặc phím ← / →.' : 'Kéo mép trang bằng chuột hoặc ngón tay; bấm mép trang hoặc dùng phím ← / →.'} Home: mục lục; End: trang cuối. Chọn ảnh để xem món.</p>
         {failed && <p className="notebook-help" role="status">Đang dùng sổ thực đơn nhẹ. Bạn vẫn có thể lật trang, xem món và gọi đặt món.</p>}
         <details className="notebook-accessible-menu"><summary>Danh sách món — đọc và chọn không cần 3D</summary><div>{menuDishes.map(item => <button type="button" key={item.id} onClick={() => selectDish(item.id)}><span><strong>{item.name}</strong><span>{item.description}</span></span><span>{formatMenuPrice(item.price)}</span></button>)}</div></details>
-      </section>
+      </section>}
+      <nav className="notebook-footer-actions" aria-label="Liên hệ nhà hàng"><a href="tel:0933446996">Gọi đặt món <span>0933 446 996</span></a><a href="/#dat-ban">Đặt bàn <span aria-hidden="true">↗</span></a></nav>
       <footer className="notebook-note"><p>Giá tham khảo từ website nhà hàng, đối chiếu ngày <time dateTime="2026-10-02">02/10/2026</time>. Vui lòng liên hệ để xác nhận giá và tình trạng phục vụ. “Đề xuất” là gợi ý biên tập.</p><a href="https://ngochieu.com.vn/" target="_blank" rel="noreferrer">Nguồn thực đơn <span aria-hidden="true">↗</span></a></footer>
     </main>
     {dish && <DishDialog dish={dish} onClose={() => setDish(null)} />}

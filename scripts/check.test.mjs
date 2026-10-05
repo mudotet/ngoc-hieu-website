@@ -148,8 +148,41 @@ test('restaurant identity, photography and booking stay intact', () => {
   assert.match(app, /<RestaurantScene theme=\{theme\}/);
   assert.match(css, /height:100dvh/);
   assert.equal((app.match(/<RestaurantScene /g) || []).length, 1);
-  assert.match(app, /className="hero cinematic-story"[\s\S]*<RestaurantScene[\s\S]*<\/section>/);
-  assert.doesNotMatch(app, /className="journey wrap"|hero-photo/);
+  assert.match(app, /cinematic-story[\s\S]*<RestaurantScene[\s\S]*<\/section>/);
+  assert.doesNotMatch(app, /className="journey wrap"/);
+});
+
+test('mobile homepage makes 3D optional and keeps details collapsed', () => {
+  const app = read('src/App.tsx');
+  assert.match(app, /const sceneEnabled = !mobile \|\| mobileTourEnabled/);
+  assert.match(app, /sceneEnabled \? <>/);
+  assert.match(app, /tourMode=\{mobile \? 'steps' : 'scroll'\}/);
+  assert.match(app, /mobile-hero-photo/);
+  assert.match(app, /Khám phá quán/);
+  assert.match(app, /mobile-bottom-nav/);
+  assert.match(app, /seek\(requestedChapter.current \+ 1\)/);
+  assert.ok(app.indexOf('className="tour-steps"') < app.indexOf('className="story-overlay"'), 'mobile navigation must precede details in normal flow');
+  assert.match(read('src/style.css'), /\.mobile-tour \.tour-steps\{position:relative;bottom:auto;order:2/);
+  assert.match(app, /<details className="booking-disclosure"/);
+  assert.match(read('src/style.css'), /@media\(max-width:767px\) and \(max-height:650px\)\{\.mobile-tour \.hero-visual\{height:140px\}/);
+  assert.match(app, /<details[^>]*className="chapter-details"/);
+  assert.doesNotMatch(app, /<details[^>]*className="chapter-details"[^>]*\bopen\b/);
+  const scene = read('src/RestaurantScene.tsx');
+  assert.match(scene, /scene.fog = distanceFog/);
+  assert.match(scene, /const ambientOcclusion = !dark/);
+  assert.match(scene, /tourMode === 'scroll' && chapter.dataset.journey !== stage.name/);
+  assert.match(scene, /tourMode === 'steps' && requestedStage >= 0/);
+});
+
+test('mobile menu defaults to a list and makes the book opt-in', () => {
+  const menu = read('src/MenuPage.tsx');
+  assert.match(menu, /\[mobileBook, setMobileBook\] = useState\(false\)/);
+  assert.match(menu, /const showBook = !mobile \|\| mobileBook/);
+  assert.match(menu, /if \(previousShowBook !== showBook\)/);
+  assert.match(menu, /notebook-menu-list/);
+  assert.match(menu, /notebook-list-nav/);
+  assert.match(menu, /aria-modal|<dialog/);
+  assert.match(read('src/menu.css'), /env\(safe-area-inset-bottom/);
 });
 
 test('notebook route and official journal sources remain available', () => {
@@ -312,14 +345,16 @@ test('cinematic story exposes seven chapters and truthful booking actions', () =
   }
   assert.match(scene, /storychapter/);
   assert.match(scene, /storyseek/);
-  assert.match(scene, /if \(!journeyTrigger\) gsap.killTweensOf\(progress\)/);
+  assert.match(scene, /if \(reduced \|\| tourMode === 'steps'\) return/);
+  assert.match(scene, /const tweenProgress/);
   assert.match(scene, /PMREMGenerator/);
   assert.match(scene, /RoomEnvironment/);
   assert.match(app, /<form/);
   assert.match(app, /required/);
   assert.match(app, /reportValidity\(\)/);
   assert.match(app, /digits.length >= 8 && digits.length <= 15/);
-  assert.match(app, /hidden=\{chapter !== 5\}/);
+  assert.match(app, /<details/);
+  assert.match(app, /<BookingForm/);
   assert.match(app, /mailto:/);
   assert.match(app, /07:00/);
   assert.match(app, /22:00/);
@@ -371,7 +406,13 @@ test('scroll lighting fills shadows without exposure spikes or abrupt AO', async
   assert.ok(settings && expression);
   const lighting = new Function(`return (${settings[1]})`)();
   const intensity = new Function('THREE', 'sceneLighting', 'progress', `return ${expression[1]}`);
-  assert.ok(lighting.dark.hemisphere > 0.55 && lighting.dark.fill > 0.35);
+  assert.equal(lighting.dark.hemisphere, 0.55);
+  assert.equal(lighting.dark.fill, 0.35);
+  assert.equal(lighting.dark.environment, 0.35);
+  assert.equal(lighting.dark.interior, 12);
+  assert.equal(lighting.dark.entrance, 16);
+  assert.match(source, /light.color.set\(palette.cream\).lerp\(new THREE.Color\(palette.amber\), dark \? 0.35 : 1\)/);
+  assert.match(source, /housePalette\[index\], dark \? 0.06 : 0.35/);
   assert.equal(lighting.dark.exposure, 1.05);
   assert.ok(lighting.vignette <= 0.08);
   assert.equal(intensity(THREE, lighting, 0.24), 0);

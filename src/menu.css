@@ -87,6 +87,27 @@
 .notebook-accessible-menu button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 20px; text-align: left; min-height: 64px; padding: 14px 4px; border: 0; border-top: 1px solid var(--line); background: var(--transparent); color: var(--text); font: inherit; font-size: 12px; }
 .notebook-accessible-menu button > span:first-child > span { display: block; color: var(--muted); margin-top: 6px; }
 .notebook-accessible-menu button > span:last-child { flex-shrink: 0; color: var(--accent); }
+.notebook-view-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 auto 24px; max-width: 1100px; }
+.notebook-view-switch button { min-height: 48px; padding: 12px 18px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--text); }
+.notebook-view-switch span { font-size: 12px; color: var(--muted); }
+.notebook-menu-list { background: var(--cream); color: var(--purple); padding: 0 16px 16px; margin-inline: -16px; }
+.notebook-list-nav { position: sticky; top: 0; z-index: var(--layer-nav); display: flex; gap: 8px; overflow-x: auto; padding: 10px 4px; margin-inline: -4px; background: var(--cream); border-bottom: 1px solid var(--paper-line); }
+.notebook-list-nav a { display: inline-flex; flex-shrink: 0; align-items: center; min-height: 48px; padding: 10px 16px; border: 1px solid var(--paper-line); color: var(--purple); font-size: 14px; }
+.notebook-list-nav a:hover, .notebook-list-nav a:focus-visible { border-color: var(--green-text); color: var(--green-text); }
+.notebook-list-category { padding-top: 36px; }
+.notebook-list-category > h2 { font-size: 30px; margin: 0 0 24px; scroll-margin-top: 92px; }
+.notebook-list-dish { margin: 0 0 36px; padding-bottom: 28px; border-bottom: 1px solid var(--paper-line); }
+.notebook-list-dish > img { width: 100%; height: auto; aspect-ratio: 1.25; object-fit: cover; background: var(--paper); }
+.notebook-list-copy { padding-top: 20px; }
+.notebook-list-copy h3 { font-size: 23px; line-height: 1.4; letter-spacing: -.035em; margin: 0 0 12px; }
+.notebook-list-copy p { font-size: 16px; line-height: 1.7; color: var(--purple-mid); margin: 0; }
+.notebook-list-order { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-top: 20px; }
+.notebook-list-order .notebook-price, .notebook-list-order .notebook-order { margin: 0; }
+.notebook-list-order .notebook-order { border: 0; font: inherit; font-size: 15px; }
+.notebook-menu-list :focus-visible { outline: 3px solid var(--green-text); outline-offset: 3px; }
+.notebook-footer-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; max-width: 690px; margin: 32px auto 0; padding-block: 20px; border-block: 1px solid var(--line); }
+.notebook-footer-actions a { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-height: 48px; font-size: 14px; }
+.notebook-footer-actions span { color: var(--accent); }
 .notebook-dialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: 0 24px 80px var(--shadow); overscroll-behavior: contain; }
 .notebook-dialog::backdrop { background: var(--photo-shade); }
 body:has(.notebook-dialog[open]) { overflow: hidden; }
@@ -104,7 +125,14 @@ body:has(.notebook-dialog[open]) { overflow: hidden; }
   .notebook-cover .notebook-spread, .notebook-cover .notebook-leaves { animation: none; transform: none; opacity: 1; }
 }
 @media (max-width: 767px) {
-  .notebook-header { min-height: 72px; gap: 8px; }
+  .menu-notebook { padding-inline: 16px; padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+  .notebook-dialog { inset: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 24px); margin: 0; border-radius: 16px 16px 0 0; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
+  .notebook-dialog-close { z-index: 1; }
+  .notebook-dialog > img { height: min(34dvh, 300px); }
+  .notebook-dialog-body { padding: 20px; }
+  .notebook-dialog p { font-size: 16px; }
+  .notebook-dialog .notebook-phone-note { font-size: 13px; }
+  .notebook-header { min-height: 72px; gap: 8px; flex-wrap: wrap; padding-block: 8px; }
   .notebook-brand { font-size: 18px; }
   .notebook-header a { font-size: 12px; gap: 6px; }
   .notebook-actions { gap: 4px; }

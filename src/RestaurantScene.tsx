@@ -21,15 +21,15 @@ declare global {
 gsap.registerPlugin(ScrollTrigger);
 
 const sceneLighting = {
-  dark: { hemisphere: 0.85, fill: 0.5, environment: 0.4, interior: 12, entrance: 16, exposure: 1.05 },
+  dark: { hemisphere: 0.55, fill: 0.35, environment: 0.35, interior: 12, entrance: 16, exposure: 1.05 },
   light: { hemisphere: 2.1, fill: 0.8, environment: 0.35, interior: 5, entrance: 7, exposure: 1.12 },
-  ao: 0.35,
-  vignette: 0.08,
+  ao: 0.18,
+  vignette: 0,
 } as const;
 
 const aoIntensity = (progress: number) => sceneLighting.ao * THREE.MathUtils.smoothstep(progress, 0.24, 0.3) * (1 - THREE.MathUtils.smoothstep(progress, 0.82, 0.88));
 
-export default function RestaurantScene({ entered, onEntered, theme }: { entered: boolean; onEntered: () => void; theme: ThemeMode }) {
+export default function RestaurantScene({ entered = false, onEntered, theme, tourMode = 'scroll' }: { entered?: boolean; onEntered?: () => void; theme: ThemeMode; tourMode?: 'scroll' | 'steps' }) {
   const themeRef = useRef(theme);
   const applyTheme = useRef<((mode: ThemeMode) => void) | null>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -109,7 +109,7 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
       const wasInStory = rect.top <= 1 && rect.bottom > 0;
       setFailed(true);
       cleanup();
-      if (wasInStory) window.scrollTo({ top: window.scrollY + chapter.getBoundingClientRect().top, behavior: 'instant' });
+      if (tourMode === 'scroll' && wasInStory) window.scrollTo({ top: window.scrollY + chapter.getBoundingClientRect().top, behavior: 'instant' });
     };
 
     try {
@@ -1093,7 +1093,8 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
       welcome.add(welcomeFace);
       const badgeGeometry = new THREE.PlaneGeometry(1, 1);
       geometries.add(badgeGeometry);
-      const badgeMaterial = material(sceneColors.white, 0.5);
+      const badgeMaterial = new THREE.MeshBasicMaterial({ color: sceneColors.white, toneMapped: false });
+      materials.add(badgeMaterial);
       badgeMaterial.name = 'brand-profile-enamel';
       const badges: THREE.Mesh[] = [];
       for (const [parent, x, y, z, size, name] of [[welcome, 0, -0.42, 0.045, 0.24, 'brand-badge-host']] as const) {
@@ -1273,10 +1274,11 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
         dark = mode === 'dark';
         scene.background = new THREE.Color(dark ? palette.ink : palette.cream);
         distanceFog.color.copy(scene.background);
+        scene.fog = distanceFog;
         const lighting = sceneLighting[mode];
         hemisphere.intensity = lighting.hemisphere;
         hemisphere.color.set(sceneColors.white);
-        hemisphere.groundColor.set(dark ? sceneColors.mortar : palette.paper);
+        hemisphere.groundColor.set(dark ? palette.ink : palette.paper);
         key.intensity = dark ? 0.85 : 2.6;
         fill.intensity = lighting.fill;
         scene.environmentIntensity = lighting.environment;
@@ -1289,7 +1291,10 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
         accent.color.set(dark ? palette.green : palette.greenMid);
         doorPaint.color.set(dark ? palette.purple : palette.purpleMid);
         houseColors.forEach((finish, index) => finish.color.copy(tint(housePalette[index], dark ? 0.06 : 0.35)));
-        interiorLights.forEach((light, index) => { light.intensity = index ? lighting.interior : lighting.entrance; });
+        interiorLights.forEach((light, index) => {
+          light.intensity = index ? lighting.interior : lighting.entrance;
+          light.color.set(palette.cream).lerp(new THREE.Color(palette.amber), dark ? 0.35 : 1);
+        });
         glass.emissive.set(palette.amber);
         glass.emissiveIntensity = dark ? 1.8 : 0.05;
         glass.opacity = dark ? 0.3 : 0.12;
@@ -1504,7 +1509,7 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
         }
         const stageIndex = Math.min(6, Math.floor(value * 7));
         const stage = stages[stageIndex];
-        if (chapter.dataset.journey !== stage.name) {
+        if (tourMode === 'scroll' && chapter.dataset.journey !== stage.name) {
           chapter.dataset.journey = stage.name;
           chapter.dispatchEvent(new CustomEvent('storychapter', { detail: { index: stageIndex, progress: value } }));
           if (caption) caption.textContent = stage.caption;
@@ -1608,7 +1613,7 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
           wisp.scale.set(0.1 + phase * 0.16, 0.2 + phase * 0.2, 1);
           wisp.material.opacity = Math.sin(phase * Math.PI) * 0.32;
         });
-        const ambientOcclusion = quality > 0 && ao ? aoIntensity(value) : 0;
+        const ambientOcclusion = !dark && quality > 0 && ao ? aoIntensity(value) : 0;
         if (ao) {
           ao.enabled = ambientOcclusion > 0;
           ao.copyMaterial.uniforms.opacity.value = ambientOcclusion;
@@ -1715,26 +1720,45 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
         render();
       }).catch(() => {});
       let journeyTrigger: ScrollTrigger | undefined;
+      const tweenProgress = (value: number, onComplete?: () => void) => {
+        gsap.killTweensOf(progress);
+        if (reduced) {
+          progress.value = value;
+          smoothedProgress = value;
+          render();
+          onComplete?.();
+          return;
+        }
+        gsap.to(progress, { value, duration: 1.8, ease: 'power2.inOut', onComplete });
+      };
       const seekChapter = (event: Event) => {
         const index = (event as CustomEvent<{ index: number }>).detail?.index;
         if (!Number.isInteger(index) || index < 0 || index > 6) return;
         const value = index === 0 ? 0 : index === 6 ? 1 : (index + 0.5) / 7;
+        if (tourMode === 'steps') {
+          tweenProgress(value);
+          return;
+        }
         if (!journeyTrigger) gsap.killTweensOf(progress);
         progress.value = value;
         smoothedProgress = value;
         if (journeyTrigger) window.scrollTo({ top: journeyTrigger.start + (journeyTrigger.end - journeyTrigger.start) * value, behavior: 'instant' });
         render();
       };
+      const requestedStage = stages.findIndex(stage => stage.name === chapter.dataset.journey);
+      if (tourMode === 'steps' && requestedStage >= 0) {
+        progress.value = requestedStage === 0 ? 0 : requestedStage === 6 ? 1 : (requestedStage + 0.5) / 7;
+        smoothedProgress = progress.value;
+      }
       chapter.addEventListener('storyseek', seekChapter);
       passes.push({ dispose: () => chapter.removeEventListener('storyseek', seekChapter) });
       controls.current = value => {
         if (journeyTrigger) {
           window.scrollTo({ top: value ? journeyTrigger.start + (journeyTrigger.end - journeyTrigger.start) * 0.2 : journeyTrigger.start, behavior: 'instant' });
-          if (value) callback.current();
+          if (value) callback.current?.();
           return;
         }
-        gsap.killTweensOf(progress);
-        gsap.to(progress, { value: value ? 0.36 : 0, duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 2.4, ease: 'power2.inOut', onUpdate: render, onComplete: () => { if (value) callback.current(); } });
+        tweenProgress(value ? 0.36 : 0, () => { if (value) callback.current?.(); });
       };
       resize = new ResizeObserver(() => {
         const { width, height } = container.getBoundingClientRect();
@@ -1754,13 +1778,15 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
       gl.domElement.addEventListener('webglcontextlost', contextLost);
       media.add({ desktop: '(min-width: 900px)', mobile: '(max-width: 899px)', reduced: '(prefers-reduced-motion: reduce)' }, context => {
         reduced = Boolean(context.conditions?.reduced);
+        if (reduced && tourMode === 'steps') gsap.getTweensOf(progress).forEach(tween => { tween.progress(1).kill(); });
         syncAnimation();
-        if (reduced) return;
+        if (reduced || tourMode === 'steps') return;
         const tween = gsap.fromTo(progress, { value: 0 }, { value: 1, ease: 'none', scrollTrigger: { trigger: chapter, start: 'top top', end: () => `+=${innerHeight * (context.conditions?.desktop ? 5 : 4)}`, pin: true, scrub: 1, invalidateOnRefresh: true } });
         journeyTrigger = tween.scrollTrigger;
         return () => { journeyTrigger = undefined; };
       }, chapter);
-      if (window.location.hash && window.location.hash !== '#home') {
+      if (import.meta.env.DEV && tourMode === 'steps') console.assert(!journeyTrigger && (!mobile || (quality === 0 && targetFps === 30)), 'Step tours must remain unpinned and preserve mobile economy rendering at 30fps');
+      if (tourMode === 'scroll' && window.location.hash && window.location.hash !== '#home') {
         const destination = document.getElementById(window.location.hash.slice(1));
         destination?.scrollIntoView({ behavior: 'instant', block: 'start' });
       }
@@ -1770,7 +1796,7 @@ export default function RestaurantScene({ entered, onEntered, theme }: { entered
       setFailed(true);
     }
     return cleanup;
-  }, []);
+  }, [tourMode]);
 
   useEffect(() => {
     if (previousEntered.current === entered) return;
