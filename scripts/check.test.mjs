@@ -116,6 +116,26 @@ test('expanded book content has unique pages and local dish photographs', () => 
   for (const category of menuCategories) assert.equal(menuPages[category.page].category, category.name);
 });
 
+test('bench cushions and backs do not overlap coplanar exterior faces', () => {
+  const source = read('src/RestaurantScene.tsx');
+  for (const name of ['left-lounge-banquette', 'reception-waiting-bench']) {
+    const rows = source.split('\n');
+    const start = rows.findIndex(row => row.includes(`name = '${name}'`));
+    assert.ok(start >= 0);
+    const boxes = rows.slice(start, start + 3).map(row => {
+      const match = row.match(/box\(\w+, \[([^\]]+)\], \[([^\]]+)\]/);
+      assert.ok(match);
+      const center = match[1].split(',').map(Number);
+      const size = match[2].split(',').map(Number);
+      return { min: center.map((v, i) => v - size[i] / 2), max: center.map((v, i) => v + size[i] / 2) };
+    });
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+      const overlap = [0, 1, 2].every(axis => Math.min(boxes[i].max[axis], boxes[j].max[axis]) - Math.max(boxes[i].min[axis], boxes[j].min[axis]) > 1e-6);
+      assert.ok(!overlap, `${name}: overlapping parts ${i}/${j} cause coplanar side-face flicker`);
+    }
+  }
+});
+
 test('every menu photograph exists locally', () => {
   const images = [...read('src/content.ts').matchAll(/image: '([^']+)'/g)].map(match => match[1]);
   assert.equal(images.length, 4);

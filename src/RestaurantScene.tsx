@@ -318,8 +318,8 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       box(bone, [-9, 3.74, 2.16], [7.1, 0.16, 0.38], leftBuilding).name = 'left-facade-cornice';
       box(accent, [-9, 3.88, 2.23], [7.2, 0.06, 0.07], leftBuilding);
       box(timber, [-11.55, 0.55, -8.3], [1.1, 0.85, 4.2], leftBuilding).name = 'left-lounge-banquette';
-      box(accent, [-11.55, 1.01, -8.3], [1.1, 0.14, 4.2], leftBuilding);
-      box(accent, [-12.02, 1.38, -8.3], [0.18, 0.9, 4.2], leftBuilding);
+      box(accent, [-11.55, 1.055, -8.3], [1.08, 0.14, 4.18], leftBuilding);
+      box(accent, [-12.02, 1.585, -8.3], [0.18, 0.9, 4.18], leftBuilding);
       for (const z of [-7.1, -9.3]) {
         box(timber, [-10.1, 0.92, z], [1.1, 0.12, 1.2], leftBuilding).name = 'left-lounge-table';
         box(iron, [-10.1, 0.48, z], [0.12, 0.85, 0.12], leftBuilding);
@@ -352,8 +352,8 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         for (let i = 0; i < 4; i++) box(i % 2 ? accent : brass, [-5.04, y + 0.2, -2.25 + i * 0.28], [0.24, 0.32, 0.1]);
       }
       box(timber, [-4.4, 0.38, -3.6], [1.45, 0.55, 1.7]).name = 'reception-waiting-bench';
-      box(accent, [-4.4, 0.72, -3.6], [1.45, 0.15, 1.7]);
-      box(accent, [-5.02, 1.07, -3.6], [0.15, 0.8, 1.7]);
+      box(accent, [-4.4, 0.74, -3.6], [1.43, 0.15, 1.68]);
+      box(accent, [-5.02, 1.225, -3.6], [0.15, 0.8, 1.68]);
       const sideFacade = new THREE.Group();
       sideFacade.name = 'facade-side';
       sideFacade.position.set(3.5, 0, -1);
