@@ -1,0 +1,11 @@
+node_modules
+.git
+.env*
+dist
+assets
+docs
+copy
+website
+.kilo
+.kilocode
+skills-lock.json

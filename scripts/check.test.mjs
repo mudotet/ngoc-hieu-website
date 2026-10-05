@@ -1,0 +1,456 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import ts from 'typescript';
+
+const root = new URL('../', import.meta.url);
+const read = path => readFileSync(new URL(path, root), 'utf8');
+
+test('shared theme text and controls meet WCAG AA in both modes', () => {
+  const module = { exports: {} };
+  const compiled = ts.transpileModule(read('src/theme.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('require', 'module', 'exports', compiled)(createRequire(import.meta.url), module, module.exports);
+  const { palette, themeColors } = module.exports;
+  const luminance = hex => hex.slice(1).match(/../g).map(channel => {
+    const value = parseInt(channel, 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+  const check = (foreground, background, label) => {
+    const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    const ratio = (values[0] + 0.05) / (values[1] + 0.05);
+    assert.ok(ratio >= 4.5, `${label}: ${ratio.toFixed(2)}:1 is below AA`);
+  };
+  for (const [mode, colors] of Object.entries(themeColors)) {
+    for (const background of ['surface', 'surface-alt']) {
+      for (const foreground of ['text', 'muted', 'accent', 'heading-accent']) {
+        check(colors[foreground], colors[background], `${mode} ${foreground}/${background}`);
+      }
+    }
+    for (const background of ['button-bg', 'button-hover']) check(colors['button-text'], colors[background], `${mode} button/${background}`);
+  }
+  for (const paper of [palette.cream, palette.paper]) {
+    for (const ink of [palette.purple, palette.purpleMid, palette.greenText]) check(ink, paper, 'menu text/paper');
+  }
+  check(palette.amber, palette.purple, 'embossed cover');
+});
+
+test('theme defaults dark while preserving a saved light preference and blocked storage support', () => {
+  assert.match(read('index.html'), /color-scheme: dark/);
+  const compiled = ts.transpileModule(read('src/theme.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const saved of ['dark', 'light', 'invalid', null, new Error('Storage blocked')]) {
+    const properties = new Map();
+    const rootElement = { dataset: {}, style: { setProperty: (key, value) => properties.set(key, value) } };
+    const storage = {
+      getItem: () => { if (saved instanceof Error) throw saved; return saved; },
+      setItem: () => { if (saved instanceof Error) throw saved; },
+    };
+    const module = { exports: {} };
+    new Function('require', 'module', 'exports', 'document', 'localStorage', compiled)(
+      createRequire(import.meta.url), module, module.exports, { documentElement: rootElement, querySelector: () => null }, storage,
+    );
+    module.exports.initializeTheme();
+    assert.equal(rootElement.dataset.theme, saved === 'light' ? 'light' : 'dark');
+    assert.equal(properties.get('--purple'), module.exports.palette.purple);
+    module.exports.setTheme('dark');
+    assert.equal(rootElement.dataset.theme, 'dark');
+    assert.equal(properties.get('--surface'), module.exports.themeColors.dark.surface);
+    module.exports.setTheme('light');
+    assert.equal(properties.get('--surface'), module.exports.themeColors.light.surface);
+  }
+});
+
+test('book curvature anchors the spine and springs settle at varying frame rates', () => {
+  const module = { exports: {} };
+  const compiled = ts.transpileModule(read('src/bookPhysics.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('module', 'exports', compiled)(module, module.exports);
+  const { pagePoint, springStep, normalizePage } = module.exports;
+  for (const progress of [0, 0.2, 0.5, 0.8, 1]) {
+    const spine = pagePoint(0, 0.5, progress, Math.max(0, progress - 0.1));
+    assert.deepEqual(spine, { x: 0, y: 0, z: 0 });
+  }
+  assert.ok(Math.abs(pagePoint(1, 0.5, 0, 0).x - 2.65) < 0.00001);
+  assert.ok(Math.abs(pagePoint(1, 0.5, 1, 1).x + 2.65) < 0.00001);
+  const middle = pagePoint(0.5, 0.5, 0.5, 0.35);
+  const edge = pagePoint(1, 0.5, 0.5, 0.35);
+  assert.ok(Math.abs(middle.x * edge.y - middle.y * edge.x) > 0.05, 'turning paper must curve, not rotate as a flat panel');
+  for (const fps of [30, 60, 120]) {
+    let state = { value: 0, velocity: 0 };
+    for (let frame = 0; frame < fps * 3; frame++) state = springStep(state, 1, 1 / fps);
+    assert.ok(Math.abs(state.value - 1) < 0.001 && Math.abs(state.velocity) < 0.001, `spring must settle at ${fps}fps`);
+    for (let frame = 0; frame < fps * 3; frame++) state = springStep(state, 0, 1 / fps);
+    assert.ok(Math.abs(state.value) < 0.001, 'cancelled turn must return');
+  }
+  const state = { value: 0.4, velocity: 0.2 };
+  assert.deepEqual(springStep(state, 1, NaN), state);
+  assert.ok(Number.isFinite(springStep(state, 1, 10).value));
+  assert.equal(normalizePage(Infinity, 11, false), 0);
+  assert.equal(normalizePage(-3, 11, true), 0);
+  assert.equal(normalizePage(99, 11, false), 10);
+  assert.equal(normalizePage(3, 11, false), 2);
+  assert.equal(normalizePage(3, 11, true), 3);
+  assert.equal(normalizePage(3, NaN, true), 0);
+  assert.equal(normalizePage(3, 2.5, true), 1);
+});
+
+test('expanded book content has unique pages and local dish photographs', () => {
+  const load = path => {
+    const module = { exports: {} };
+    const compiled = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    new Function('require', 'module', 'exports', compiled)(name => {
+      assert.equal(name, './content');
+      return load('src/content.ts');
+    }, module, module.exports);
+    return module.exports;
+  };
+  const { menuPages, menuDishes, menuCategories } = load('src/menuContent.ts');
+  assert.equal(menuPages[0].kind, 'contents');
+  assert.ok(menuDishes.length >= 10);
+  assert.equal(new Set(menuPages.map(page => page.id)).size, menuPages.length);
+  assert.equal(new Set(menuDishes.map(dish => dish.id)).size, menuDishes.length);
+  for (const dish of menuDishes) {
+    assert.ok(existsSync(new URL(`public${dish.image}`, root)), dish.image);
+    assert.ok(dish.price === null || Number.isFinite(dish.price) && dish.price > 0);
+    assert.ok(menuPages.some(page => page.dishes.some(item => item.id === dish.id)));
+  }
+  for (const category of menuCategories) assert.equal(menuPages[category.page].category, category.name);
+});
+
+test('every menu photograph exists locally', () => {
+  const images = [...read('src/content.ts').matchAll(/image: '([^']+)'/g)].map(match => match[1]);
+  assert.equal(images.length, 4);
+  for (const image of images) assert.ok(existsSync(new URL(`public/images/${image}`, root)), image);
+});
+
+test('navigation anchors have matching destinations', () => {
+  const app = read('src/App.tsx');
+  for (const match of app.matchAll(/(?:href=|, )['"]#([^'"]+)['"]/g)) {
+    assert.ok(app.includes(`id="${match[1]}"`), `Missing anchor ${match[1]}`);
+  }
+});
+
+test('restaurant identity, photography and booking stay intact', () => {
+  const app = read('src/App.tsx');
+  assert.match(app, /Nhà hàng Ngọc Hiếu/);
+  assert.match(app, /tel:0933446996/);
+  assert.match(app, /mailto:bittetngochieu@gmail.com/);
+  assert.match(app, /ngoc-hieu-facebook-profile\.jpg/);
+  assert.match(app, /href="\/thuc-don"/);
+  assert.match(app, /loading="lazy" decoding="async"/);
+  assert.match(app, /menuToggle.current\?\.focus\(\)/);
+  assert.doesNotMatch(app, /href="#"|NOXÉ|<video/);
+  const images = [...app.matchAll(/src="(\/images\/[^\"]+)"/g)];
+  for (const [, image] of images) assert.ok(existsSync(new URL(`public${image}`, root)), image);
+  const css = read('src/style.css');
+  assert.doesNotMatch(css + read('src/menu.css'), /#[\da-f]{3,8}\b/i);
+  assert.match(read('src/theme.ts'), /#2A1650/);
+  assert.match(read('src/theme.ts'), /#1F9D55/);
+  assert.match(app, /<RestaurantScene theme=\{theme\}/);
+  assert.match(css, /height:100dvh/);
+  assert.equal((app.match(/<RestaurantScene /g) || []).length, 1);
+  assert.match(app, /className="hero cinematic-story"[\s\S]*<RestaurantScene[\s\S]*<\/section>/);
+  assert.doesNotMatch(app, /className="journey wrap"|hero-photo/);
+});
+
+test('notebook route and official journal sources remain available', () => {
+  const menu = read('src/MenuPage.tsx');
+  assert.match(read('src/main.tsx'), /\/thuc-don/);
+  assert.match(menu, /ArrowLeft/);
+  assert.match(menu, /ArrowRight/);
+  assert.match(menu, /aria-live="polite"/);
+  assert.match(menu, /dish.price/);
+  assert.match(menu, /prefers-reduced-motion/);
+  assert.match(menu, /clearTimeout/);
+  assert.match(menu, /MenuBook3D/);
+  assert.match(menu, /<dialog/);
+  assert.match(menu, /Đặt món này/);
+  assert.match(menu, /tel:0933446996/);
+  assert.match(menu, /setTarget\(value =>/);
+  assert.match(menu, /if \(!event.currentTarget.open\) onClose\(\)/);
+  assert.match(read('src/App.tsx'), /facebook.com\/reel\/1607893957441894/);
+});
+
+test('initial camera corner rays stay within the road footprint at three viewport shapes', async () => {
+  const { PerspectiveCamera, Vector2, Vector3, Plane, Raycaster } = await import('three');
+  const source = read('src/RestaurantScene.tsx');
+  const numbers = (pattern, group = 1) => {
+    const match = source.match(pattern);
+    assert.ok(match, `Missing scene configuration: ${pattern}`);
+    return match[group].split(',').map(Number);
+  };
+  const road = /box\(asphalt, \[([\d., -]+)\], \[([\d., -]+)\]\)\.name = 'road-ground'/;
+  const [x, y, z] = numbers(road);
+  const [width, height, depth] = numbers(road, 2);
+  const outside = /name: 'outside', at: 0, position: new THREE.Vector3\(([\d., -]+)\), look: new THREE.Vector3\(([\d., -]+)\)/;
+  const lens = numbers(/new THREE.PerspectiveCamera\(([\d., -]+)\)/);
+  const [aspectScale] = numbers(/Math.max\(1, ([\d.]+) \/ camera.aspect\)/);
+  assert.match(source, /CatmullRomCurve3/);
+  assert.match(source, /camera.lookAt\(target\)/);
+  const ground = new Plane(new Vector3(0, 1, 0), -(y + height / 2));
+  for (const [w, h] of [[1440, 900], [390, 844], [2560, 1080]]) {
+    const camera = new PerspectiveCamera(...lens);
+    camera.aspect = w / h;
+    camera.position.fromArray(numbers(outside));
+    camera.position.y *= Math.max(1, aspectScale / camera.aspect);
+    camera.lookAt(new Vector3(...numbers(outside, 2)));
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    for (const u of [-1, 1]) for (const v of [-1, 1]) {
+      const ray = new Raycaster();
+      ray.setFromCamera(new Vector2(u, v), camera);
+      const hit = ray.ray.intersectPlane(ground, new Vector3());
+      assert.ok(hit && Math.abs(hit.x - x) <= width / 2 && Math.abs(hit.z - z) <= depth / 2, `${w}x${h} corner ${u},${v} misses road`);
+    }
+  }
+});
+
+test('cinematic camera curve is continuous through all seven chapters', async () => {
+  const THREE = await import('three');
+  const source = read('src/RestaurantScene.tsx');
+  const stagesSource = source.match(/const stages = (\[[\s\S]*?\n\s*\]);/);
+  const knotsSource = source.match(/const cameraKnots = (\[[\s\S]*?\n\s*\]);/);
+  assert.ok(stagesSource && knotsSource);
+  const stages = new Function('THREE', `return ${stagesSource[1]}`)(THREE);
+  const knots = new Function('THREE', 'stages', `return ${knotsSource[1]}`)(THREE, stages);
+  assert.ok(knots[0].position.x < knots[1].position.x && knots[1].position.x < knots[2].position.x, 'opening must sweep left to right');
+  const sweep = new THREE.CatmullRomCurve3(knots.map(knot => knot.position), false, 'catmullrom', 0.12);
+  for (let i = 0; i <= 200; i++) {
+    const point = sweep.getPoint(i / 200 * (2 / (knots.length - 1)));
+    assert.ok(point.z < 12.5, 'opening sweep must not enter the opposite building row');
+  }
+  assert.doesNotMatch(source, /camera.position.multiplyScalar/);
+  assert.match(source, /camera-building-clearance/);
+  assert.match(source, /camera-frontage-sightline/);
+  assert.equal(stages[1].position.x, 0, 'camera must align with main doorway');
+  const entry = knots.find(knot => knot.at === 0.24);
+  assert.ok(entry && entry.position.x === 0 && entry.position.z > 2);
+  const inside = knots.find(knot => knot.at === 0.28);
+  assert.ok(inside && inside.position.x === 0 && inside.position.z < 2);
+  assert.equal(stages.length, 7);
+  assert.equal(stages[0].at, 0);
+  assert.equal(stages.at(-1).at, 1);
+  for (let i = 1; i < knots.length; i++) assert.ok(knots[i].at > knots[i - 1].at);
+  const camera = new THREE.CatmullRomCurve3(knots.map(knot => knot.position), false, 'catmullrom', 0.12);
+  const look = new THREE.CatmullRomCurve3(knots.map(knot => knot.look), false, 'catmullrom', 0.12);
+  let previous = camera.getPoint(0);
+  for (let i = 0; i <= 2000; i++) {
+    const point = camera.getPoint(i / 2000);
+    assert.ok(point.toArray().every(Number.isFinite));
+    assert.ok(point.y > 0.18, 'camera must stay above the ground');
+    assert.ok(point.distanceTo(previous) < 0.5, 'curve must not jump between samples');
+    assert.ok(point.distanceTo(look.getPoint(i / 2000)) > 0.1, 'camera and target must not coincide');
+    previous = point;
+  }
+});
+
+test('booking phone pattern rejects punctuation-only and malformed values', () => {
+  const app = read('src/App.tsx');
+  const match = app.match(/name="phone"[^\n]*?pattern="([^"]+)"/);
+  assert.ok(match);
+  const pattern = new RegExp(`^(?:${match[1]})$`, 'v');
+  for (const value of ['0933446996', '+84 933 446 996', '(024) 3978-2251']) assert.ok(pattern.test(value), value);
+  for (const value of ['--------', '........', '        ', '1234', '1234567890123456', '0933446996abc']) assert.ok(!pattern.test(value), value);
+});
+
+test('neighboring houses continue both restaurant street frontages', () => {
+  const source = read('src/RestaurantScene.tsx');
+  assert.match(source, /const frontage = side \? 3.5 : 2/);
+  assert.match(source, /const rowStart = side \? -14.8 : -15.3/);
+  assert.match(source, /const along = rowStart - i \* 5.55/);
+  for (const side of [false, true]) {
+    const first = side ? -14.8 : -15.3;
+    const boundary = side ? -12 : -12.5;
+    assert.ok(Math.abs(first + 5.5 / 2 - boundary) < 0.1, 'first neighbor must adjoin restaurant block');
+    assert.ok(5.55 - 5.5 < 0.1, 'houses must form a continuous terrace');
+  }
+  assert.doesNotMatch(source, /const across = side \? -22 : -23/);
+});
+
+test('homepage opening resets root visits without overriding section links', () => {
+  const source = read('src/main.tsx');
+  const block = source.slice(source.indexOf('if (window.location.pathname'));
+  const run = new Function('window', block.slice(0, block.indexOf('createRoot')));
+  for (const [pathname, hash, reset] of [['/', '', true], ['/', '#home', true], ['/', '#dat-ban', false], ['/thuc-don', '', false]]) {
+    let position = 2400;
+    const window = { location: { pathname, hash }, history: { scrollRestoration: 'auto' }, scrollTo: options => { position = options.top; } };
+    run(window);
+    assert.equal(position, reset ? 0 : 2400);
+  }
+  assert.match(read('src/RestaurantScene.tsx'), /const value = index === 0 \? 0 : index === 6 \? 1/);
+  assert.match(read('src/RestaurantScene.tsx'), /destination\?\.scrollIntoView\(\{ behavior: 'instant', block: 'start' \}\)/);
+});
+
+test('both welcome staff stand clear of the entrance corridor', () => {
+  const source = read('src/RestaurantScene.tsx');
+  for (const name of ['greeter', 'receptionist']) {
+    const match = source.match(new RegExp(`${name}\\.body\\.position\\.set\\(([-\\d.]+), ([-\\d.]+), ([-\\d.]+)\\)`));
+    assert.ok(match, name);
+    const x = Number(match[1]);
+    assert.ok(Math.abs(x) >= 1.8, `${name} must leave the 2.6m entrance plus body clearance open`);
+  }
+});
+
+test('restaurant includes staffed counters and an animated cooking kitchen', () => {
+  const source = read('src/RestaurantScene.tsx');
+  assert.match(source, /sightline.intersectObjects\(sightlineBlockers, false\)/);
+  for (const name of ['cashier-${name}', "['doorway',", "['booking',", 'cashier-chef', 'kitchen-stove', 'kitchen-pan', 'kitchen-steak', 'kitchen-flame-', 'kitchen-smoke-']) assert.ok(source.includes(name), name);
+});
+
+test('diagonal pavement corner and right wall gain branded details', () => {
+  const source = read('src/RestaurantScene.tsx');
+  assert.doesNotMatch(source, /GIẢM GIÁ|SALE|50%/);
+  assert.match(source, /pocketBounds.intersectsBox\(entranceClearance\)/);
+  assert.match(source, /advertisementBounds.min.x >= blankWallBounds.max.x/);
+  for (const name of ['diagonal-corner-pocket', 'corner-planter', 'corner-bench', 'right-wall-advertisement']) assert.ok(source.includes(name), name);
+});
+
+test('cinematic story exposes seven chapters and truthful booking actions', () => {
+  const app = read('src/App.tsx');
+  const scene = read('src/RestaurantScene.tsx');
+  for (const chapter of ['outside', 'doorway', 'signature', 'feedback', 'menu', 'booking', 'finale']) {
+    assert.ok(scene.includes(`name: '${chapter}'`), `Missing chapter ${chapter}`);
+  }
+  assert.match(scene, /storychapter/);
+  assert.match(scene, /storyseek/);
+  assert.match(scene, /if \(!journeyTrigger\) gsap.killTweensOf\(progress\)/);
+  assert.match(scene, /PMREMGenerator/);
+  assert.match(scene, /RoomEnvironment/);
+  assert.match(app, /<form/);
+  assert.match(app, /required/);
+  assert.match(app, /reportValidity\(\)/);
+  assert.match(app, /digits.length >= 8 && digits.length <= 15/);
+  assert.match(app, /hidden=\{chapter !== 5\}/);
+  assert.match(app, /mailto:/);
+  assert.match(app, /07:00/);
+  assert.match(app, /22:00/);
+  assert.match(app, /href="\/thuc-don"/);
+  assert.doesNotMatch(app, /5\/5|4\.9\/5|Đặt bàn thành công|window.location.href = href/);
+  assert.match(app, /href=\{request\} target="_blank"/);
+});
+
+test('3D menu remains lazy and provides material and lifecycle safeguards', () => {
+  const book = read('src/MenuBook3D.tsx');
+  const menu = read('src/MenuPage.tsx');
+  assert.match(menu, /lazy\(/);
+  assert.match(book, /onBeforeCompile|SkinnedMesh/);
+  assert.match(book, /normalMap/);
+  assert.match(book, /anisotropy/);
+  assert.match(book, /webglcontextlost/);
+  assert.match(book, /cancelAnimationFrame/);
+  assert.match(book, /ResizeObserver/);
+  assert.match(book, /pointercancel/);
+  assert.match(book, /\.dispose\(\)/);
+});
+
+test('both restaurant buildings have entrances and a connected interior', () => {
+  const source = read('src/RestaurantScene.tsx');
+  for (const name of ['left-entrance-door', 'interior-connecting-door', 'backdrop']) assert.ok(source.includes(name), name);
+  assert.match(source, /connectingDoor.position.set\(-5.5, 0.1, -5.96\)/);
+  assert.match(source, /new THREE.Fog\(palette.ink, 24, 85\)/);
+  assert.match(source, /distanceFog.color.copy\(scene.background\)/);
+});
+
+test('demo batches static geometry and isolates production diagnostics', () => {
+  const scene = read('src/RestaurantScene.tsx');
+  assert.match(scene, /static-architecture-batch/);
+  assert.match(scene, /animatedRoots.has\(object\)/);
+  assert.match(scene, /import.meta.env.DEV/);
+  assert.match(scene, /dataset.renderedFps/);
+  assert.match(scene, /dataset.drawCalls/);
+  assert.match(read('src/main.tsx'), /lazy\(\(\) => import\('\.\/MenuPage'\)\)/);
+  const deployment = JSON.parse(read('vercel.json'));
+  assert.ok(deployment.rewrites.some(rule => rule.source === '/thuc-don' && rule.destination === '/index.html'));
+  assert.match(read('.vercelignore'), /\.env\*/);
+});
+
+test('scroll lighting fills shadows without exposure spikes or abrupt AO', async () => {
+  const THREE = await import('three');
+  const source = read('src/RestaurantScene.tsx');
+  const settings = source.match(/const sceneLighting = ([\s\S]*?) as const;/);
+  const expression = source.match(/const aoIntensity = \(progress: number\) => ([^;]+);/);
+  assert.ok(settings && expression);
+  const lighting = new Function(`return (${settings[1]})`)();
+  const intensity = new Function('THREE', 'sceneLighting', 'progress', `return ${expression[1]}`);
+  assert.ok(lighting.dark.hemisphere > 0.55 && lighting.dark.fill > 0.35);
+  assert.equal(lighting.dark.exposure, 1.05);
+  assert.ok(lighting.vignette <= 0.08);
+  assert.equal(intensity(THREE, lighting, 0.24), 0);
+  assert.equal(intensity(THREE, lighting, 0.88), 0);
+  assert.ok(intensity(THREE, lighting, 0.241) < 0.001);
+  for (let step = 0; step <= 1000; step++) {
+    const value = intensity(THREE, lighting, step / 1000);
+    assert.ok(value >= 0 && value <= 0.35);
+  }
+});
+
+test('facade logo preserves source colors without emissive washout', () => {
+  const source = read('src/RestaurantScene.tsx');
+  assert.match(source, /const signMaterial = new THREE.MeshBasicMaterial\(\{ map: letterTexture, toneMapped: false \}\)/);
+  assert.doesNotMatch(source, /signMaterial.emissiveIntensity/);
+  assert.match(source, /ledBase = dark \? 1.9 : 0.2/);
+});
+
+test('scene theme updates retain natural materials and dispose postprocessing', () => {
+  const scene = read('src/RestaurantScene.tsx');
+  assert.match(scene, /UnrealBloomPass/);
+  assert.match(scene, /OutputPass/);
+  assert.match(scene, /sceneColors\.skin/);
+  assert.match(scene, /sceneColors\.steak/);
+  assert.match(scene, /\[theme\]/);
+  assert.match(scene, /passes.forEach\(pass => pass.dispose\(\)\)/);
+  assert.match(scene, /composer\?\.dispose\(\)/);
+  assert.match(scene, /composer\?\.setSize\(width, height\)/);
+  assert.doesNotMatch(scene, /#[\da-f]{6}\b/i);
+});
+
+test('copy and animation respect design constraints', () => {
+  assert.doesNotMatch(read('src/App.tsx') + read('src/content.ts'), /[\u2013\u2014]/);
+  const scene = read('src/RestaurantScene.tsx');
+  assert.match(scene, /prefers-reduced-motion/);
+  assert.match(scene, /if \(previousEntered.current === entered\) return;/);
+  assert.match(scene, /gsap.killTweensOf\(progress\)/);
+  assert.match(scene, /geometries.forEach\(item => item.dispose\(\)\)/);
+  assert.match(scene, /intersection\?\.disconnect\(\)/);
+  assert.match(scene, /cancelAnimationFrame/);
+  assert.match(scene, /document.hidden/);
+  assert.match(scene, /welcome-host/);
+  assert.match(scene, /welcome-receptionist/);
+  assert.match(scene, /welcome-board/);
+  assert.match(scene, /facade-side/);
+  assert.match(scene, /pedestrian-/);
+  assert.match(scene, /ngoc-hieu-facebook-profile\.jpg/);
+  assert.match(scene, /facade-ticker-/);
+  assert.match(scene, /CapsuleGeometry/);
+  assert.match(scene, /food-steak/);
+  assert.match(scene, /led-strip-/);
+  assert.match(scene, /street-tree-/);
+  assert.match(scene, /falling-leaf-/);
+  assert.match(scene, /walking-dog/);
+  assert.match(scene, /dog-leash/);
+  assert.match(scene, /ResizeObserver/);
+  assert.match(scene, /closest<HTMLElement>\('\.hero'\)/);
+  assert.match(scene, /new THREE.CanvasTexture\(signCanvas\)/);
+  assert.match(scene, /fillText\('Ngọc Hiếu kính chào'/);
+  assert.match(scene, /journey-finale-logo/);
+  assert.match(scene, /steak-steam-/);
+  assert.match(scene, /leafMaterials/);
+  assert.doesNotMatch(scene, /brand-table-menu-/);
+  assert.match(scene, /road-ground/);
+  assert.match(scene, /sidewalk-ground/);
+  assert.match(scene, /restaurant-building-right/);
+  assert.match(scene, /restaurant-building-left/);
+  assert.match(scene, /connector-opening/);
+  assert.match(scene, /traffic-car-/);
+  assert.match(scene, /street-house-/);
+  assert.match(scene, /'front-left'/);
+  assert.match(scene, /'front-right'/);
+  assert.match(scene, /document.fonts.load/);
+  assert.match(scene, /textures.forEach\(item => item.dispose\(\)\)/);
+  assert.match(scene, /gsap.fromTo\(progress/);
+  assert.match(scene, /ScrollTrigger/);
+  assert.match(scene, /mobile: '\(max-width: 899px\)'/);
+  assert.match(scene, /start: ["']top top["']/);
+  assert.match(scene, /pin: true/);
+  assert.match(scene, /scrub: 1/);
+  assert.doesNotMatch(scene, /addEventListener\(["']scroll/);
+});
