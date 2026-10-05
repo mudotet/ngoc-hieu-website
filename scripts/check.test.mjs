@@ -251,6 +251,84 @@ test('startup loader releases content for readiness, timeout, skip and menu rout
   }
 });
 
+test('traffic keeps body clearance and obeys lights across frame rates', () => {
+  const module = { exports: {} };
+  const compiled = ts.transpileModule(read('src/traffic.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('module', 'exports', compiled)(module, module.exports);
+  const { createTrafficState, stepTraffic, trafficPose, trafficBodies, trafficLanes, trafficInJunction, trafficSignal, trafficGap } = module.exports;
+  for (const fps of [30, 60, 120]) {
+    const state = createTrafficState();
+    for (let frame = 0; frame < fps * 600; frame++) {
+      stepTraffic(state, 1 / fps);
+      for (let i = 0; i < state.vehicles.length; i++) for (let j = i + 1; j < state.vehicles.length; j++) {
+        const a = state.vehicles[i], b = state.vehicles[j];
+        const pa = trafficPose(a), pb = trafficPose(b), ba = trafficBodies[a.kind], bb = trafficBodies[b.kind];
+        const ax = trafficLanes[a.lane].axis === 'x', bx = trafficLanes[b.lane].axis === 'x';
+        const overlapX = Math.abs(pa.x - pb.x) < ((ax ? ba.length : ba.width) + (bx ? bb.length : bb.width)) / 2;
+        const overlapZ = Math.abs(pa.z - pb.z) < ((ax ? ba.width : ba.length) + (bx ? bb.width : bb.length)) / 2;
+        assert.ok(!(overlapX && overlapZ), `vehicle overlap at ${state.time} (${fps}fps)`);
+        if (a.lane === b.lane) {
+          const span = trafficLanes[a.lane].max - trafficLanes[a.lane].min;
+          const gap = Math.min(Math.abs(a.distance - b.distance), span - Math.abs(a.distance - b.distance)) - (ba.length + bb.length) / 2;
+          assert.ok(gap >= trafficGap - 1e-6);
+        }
+        assert.ok(!(ax !== bx && trafficInJunction(a) && trafficInJunction(b)), 'perpendicular traffic must not occupy the junction simultaneously');
+      }
+      assert.ok(!(trafficSignal(state, 'x') === 'green' && trafficSignal(state, 'z') === 'green'));
+    }
+    for (const vehicle of state.vehicles) assert.ok(vehicle.travel > 300, 'traffic must not deadlock');
+  }
+  const state = createTrafficState();
+  assert.throws(() => stepTraffic(state, NaN), RangeError);
+  assert.throws(() => stepTraffic(state, -1), RangeError);
+  stepTraffic(state, 30);
+  assert.ok(state.time <= 0.100001, 'long browser stalls must not jump vehicles through a junction');
+});
+
+test('pedestrian routes cover both streets and turn without teleporting', () => {
+  const module = { exports: {} };
+  const compiled = ts.transpileModule(read('src/streetPedestrians.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('module', 'exports', compiled)(module, module.exports);
+  const { pedestrianRoutes, pedestrianRouteLength, samplePedestrianRoute, pedestrianRandom, pedestrianLimits } = module.exports;
+  assert.ok(pedestrianLimits.economy <= 10 && pedestrianLimits.desktop <= 18);
+  const randomA = pedestrianRandom(42), randomB = pedestrianRandom(42);
+  for (let i = 0; i < 100; i++) { const n = randomA(); assert.equal(n, randomB()); assert.ok(n >= 0 && n < 1); }
+  for (const route of pedestrianRoutes) {
+    assert.ok(route.max - route.min >= 40);
+    if (route.fixed > 10) {
+      assert.ok(route.fixed - route.radius - 0.3 >= 13, 'pedestrians must remain above opposite pavement');
+      assert.ok(route.fixed + route.radius + 0.3 < 14.88, 'pedestrians must clear shifted shop steps');
+      assert.match(read('src/RestaurantScene.tsx'), /new THREE.Vector3\(19, 0, along\)/);
+    }
+    const total = pedestrianRouteLength(route);
+    let previous = samplePedestrianRoute(route, -0.01, { x: 0, z: 0, heading: 0 });
+    for (let step = 0; step <= 2000; step++) {
+      const current = samplePedestrianRoute(route, total * step / 2000, { x: 0, z: 0, heading: 0 });
+      assert.ok(Object.values(current).every(Number.isFinite));
+      assert.ok(Math.hypot(current.x - previous.x, current.z - previous.z) < 0.08, 'route turn/wrap must remain continuous');
+      const along = route.axis === 'x' ? current.x : current.z;
+      const across = route.axis === 'x' ? current.z : current.x;
+      assert.ok(along >= route.min - route.radius - 1e-6 && along <= route.max + route.radius + 1e-6);
+      assert.ok(Math.abs(across - route.fixed) <= route.radius + 1e-6);
+      previous = current;
+    }
+  }
+});
+
+test('left cashier stands behind the counter facing the entrance', () => {
+  const source = read('src/RestaurantScene.tsx');
+  const booking = source.match(/\['booking',\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)\]/);
+  assert.ok(booking);
+  const [, x, z, rotation] = booking.map(Number);
+  assert.equal(rotation, 0);
+  assert.equal(x, -10.4);
+  assert.ok(z < -1.4 - 1.24 / 2 - 0.3);
+  const front = source.match(/box\(brass, \[-10.4, 1.16, ([-\d.]+)\]/);
+  assert.ok(front && Number(front[1]) > -1.4);
+  assert.match(source, /name = 'left-reservation-terminal-screen'/);
+  assert.match(source, /name: 'booking', at: 0.79, position: new THREE.Vector3\(-8.1, 1.8, 0.2\)/);
+});
+
 test('every menu photograph exists locally', () => {
   const images = [...read('src/content.ts').matchAll(/image: '([^']+)'/g)].map(match => match[1]);
   assert.equal(images.length, 4);

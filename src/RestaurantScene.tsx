@@ -11,6 +11,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { palette, sceneColors, type ThemeMode } from './theme';
+import { createTrafficState, stepTraffic, trafficBodies, trafficPose, trafficSignal } from './traffic';
+import { pedestrianLimits, pedestrianRandom, pedestrianRoutes, pedestrianRouteLength, samplePedestrianRoute } from './streetPedestrians';
 
 declare global {
   interface ImportMeta {
@@ -327,8 +329,10 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       }
       box(timber, [-10.4, 0.66, -1.4], [2.5, 1.12, 1.1], leftBuilding).name = 'left-reception-counter';
       box(bone, [-10.4, 1.26, -1.4], [2.65, 0.1, 1.24], leftBuilding);
-      for (let x = -11.55; x < -9.2; x += 0.2) box(brass, [x, 0.67, -1.98], [0.025, 1, 0.03], leftBuilding);
-      box(iron, [-10.5, 1.45, -1.5], [0.45, 0.28, 0.04], leftBuilding);
+      for (let x = -11.55; x < -9.2; x += 0.2) box(brass, [x, 0.67, -0.82], [0.025, 1, 0.03], leftBuilding);
+      box(brass, [-10.4, 1.16, -0.82], [2.5, 0.035, 0.03], leftBuilding).name = 'left-reception-counter-front';
+      box(iron, [-10.5, 1.45, -1.5], [0.45, 0.28, 0.04], leftBuilding).name = 'left-reservation-terminal';
+      box(accent, [-10.5, 1.45, -1.474], [0.39, 0.22, 0.01], leftBuilding).name = 'left-reservation-terminal-screen';
       for (const z of [-4.5, -8.5]) {
         const glow = new THREE.PointLight(palette.amber, 9, 7);
         interiorLights.push(glow);
@@ -445,23 +449,24 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
           const house = new THREE.Group();
           house.name = `street-house-${side ? 'side' : 'front'}-${i}`;
           const lod = new THREE.LOD();
-          lod.position.copy(side ? new THREE.Vector3(17, 0, along) : new THREE.Vector3(along, 0, 17));
+          lod.position.copy(side ? new THREE.Vector3(19, 0, along) : new THREE.Vector3(along, 0, 19));
           house.position.copy(lod.position).negate();
           lod.addLevel(house, 0);
           lod.addLevel(new THREE.Group(), 65);
           scene.add(lod);
-          box(houseColors[i % houseColors.length], side ? [17, height / 2, along] : [along, height / 2, 17], side ? [7, height, 5.5] : [5.5, height, 7], house).castShadow = false;
-          detail(0, along, height + 0.08, 16.8, 5.6, 0.18, 7.4, side);
-          detail(3, along, height + 0.25, 16.8, 5.3, 0.16, 7.1, side);
-          detail(0, along, 2.7, 13.43, 5.5, 0.12, 0.22, side);
-          detail(1, along, 1.2, 13.44, 1.12, 2.4, 0.12, side);
-          detail(2, along, 1.35, 13.365, 0.87, 1.8, 0.025, side);
-          detail(0, along, 0.16, 13.18, 1.3, 0.2, 0.6, side);
+          box(houseColors[i % houseColors.length], side ? [19, height / 2, along] : [along, height / 2, 19], side ? [7, height, 5.5] : [5.5, height, 7], house).castShadow = false;
+          const oppositeDetail = (index: number, x: number, y: number, z: number, width: number, height: number, depth: number, side: boolean) => detail(index, x, y, z + 2, width, height, depth, side);
+          oppositeDetail(0, along, height + 0.08, 16.8, 5.6, 0.18, 7.4, side);
+          oppositeDetail(3, along, height + 0.25, 16.8, 5.3, 0.16, 7.1, side);
+          oppositeDetail(0, along, 2.7, 13.43, 5.5, 0.12, 0.22, side);
+          oppositeDetail(1, along, 1.2, 13.44, 1.12, 2.4, 0.12, side);
+          oppositeDetail(2, along, 1.35, 13.365, 0.87, 1.8, 0.025, side);
+          oppositeDetail(0, along, 0.16, 13.18, 1.3, 0.2, 0.6, side);
           for (const x of [-1.65, 1.65]) for (const y of [1.5, 3.8]) {
-            detail(3, along + x, y, 13.43, 1.25, 1.55, 0.14, side);
-            detail(2, along + x, y, 13.345, 1.05, 1.35, 0.025, side);
-            detail(0, along + x, y - 0.8, 13.25, 1.45, 0.12, 0.4, side);
-            detail(1, along + x, y, 13.29, 0.055, 1.4, 0.06, side);
+            oppositeDetail(3, along + x, y, 13.43, 1.25, 1.55, 0.14, side);
+            oppositeDetail(2, along + x, y, 13.345, 1.05, 1.35, 0.025, side);
+            oppositeDetail(0, along + x, y - 0.8, 13.25, 1.45, 0.12, 0.4, side);
+            oppositeDetail(1, along + x, y, 13.29, 0.055, 1.4, 0.06, side);
           }
         }
       }
@@ -536,7 +541,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       for (let x = -38; x < 35; x += 3) box(marking, [x, -0.151, 7.8], [1.4, 0.008, 0.09]);
       for (let z = -40; z < 35; z += 3) box(marking, [8.9, -0.151, z], [0.09, 0.008, 1.4]);
       const vehicleWheels: THREE.Mesh[][] = [];
-      const trafficDistances: number[] = [];
+      const trafficState = createTrafficState();
       const trafficSignals = [0, 1].map(axis => {
         const pole = new THREE.Group();
         pole.position.set(axis ? 5.5 : 2.9, 0, axis ? 0.4 : 4);
@@ -554,7 +559,6 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       const traffic = sceneColors.vehicle.map((color, index) => {
         const wheels: THREE.Mesh[] = [];
         vehicleWheels.push(wheels);
-        trafficDistances.push(index % 2 * 50);
         const car = new THREE.Group();
         car.name = `traffic-car-${index}`;
         scene.add(car);
@@ -582,7 +586,9 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
             wheels.push(wheel, hub);
           }
         }
-        car.userData.lane = index < 2 ? { axis: 'x', min: -42, max: 1, fixed: index ? 9.5 : 6.1 } : { axis: 'z', min: -43, max: 1, fixed: index === 2 ? 6.8 : 10.4 };
+        const pose = trafficPose(trafficState.vehicles[index]);
+        car.position.set(pose.x, -0.08, pose.z);
+        car.rotation.y = pose.heading;
         return car;
       });
       const roundedGeometry = new THREE.SphereGeometry(1, 16, 10);
@@ -917,14 +923,25 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       const hair = material(sceneColors.hair);
       const trousers = material(sceneColors.trousers);
       const shoe = material(sceneColors.shoe);
-      const person = (color: string) => {
+      const clothingPool = new Map<string, THREE.MeshStandardMaterial>();
+      const skinPool = [skin, material(new THREE.Color(sceneColors.skin).multiplyScalar(0.77).getStyle()), material(new THREE.Color(sceneColors.skin).lerp(new THREE.Color(palette.cream), 0.25).getStyle())];
+      const hairPool = [hair, material(sceneColors.timber), material(sceneColors.mortar)];
+      const person = (color: string, appearance?: { scale: number; width: number; skin: number; hair: number; longHair: boolean }) => {
         const body = new THREE.Group();
         scene.add(body);
-        const clothing = material(color);
+        let clothing = clothingPool.get(color);
+        if (!clothing) {
+          clothing = material(color);
+          clothingPool.set(color, clothing);
+        }
+        const complexion = appearance ? skinPool[appearance.skin] : skin;
+        const hairstyle = appearance ? hairPool[appearance.hair] : hair;
+        if (appearance) body.scale.set(appearance.scale * appearance.width, appearance.scale, appearance.scale);
         mesh(roundedGeometry, clothing, body, [0, 1.07, 0], [0.19, 0.29, 0.13]).name = 'person-garment';
-        mesh(limbGeometry, skin, body, [0, 1.37, 0], [0.055, 0.04, 0.055]);
-        mesh(headGeometry, skin, body, [0, 1.48, 0], [1, 1.2, 1]).name = 'person-head';
-        mesh(headGeometry, hair, body, [0, 1.56, -0.025], [1.04, 0.65, 1.02]);
+        mesh(limbGeometry, complexion, body, [0, 1.37, 0], [0.055, 0.04, 0.055]);
+        mesh(headGeometry, complexion, body, [0, 1.48, 0], [1, 1.2, 1]).name = 'person-head';
+        mesh(headGeometry, hairstyle, body, [0, 1.56, -0.025], [1.04, 0.65, 1.02]);
+        if (appearance?.longHair) mesh(roundedGeometry, hairstyle, body, [0, 1.4, -0.095], [0.13, 0.19, 0.06]);
         const legs: THREE.Group[] = [];
         const arms: THREE.Group[] = [];
         for (const side of [-1, 1]) {
@@ -938,8 +955,8 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
           arm.position.set(side * 0.23, 1.27, 0);
           body.add(arm);
           mesh(limbGeometry, clothing, arm, [0, -0.15, 0], [0.065, 0.075, 0.07]).name = 'person-sleeve';
-          mesh(limbGeometry, skin, arm, [0, -0.39, 0.025], [0.046, 0.065, 0.05]).name = 'person-forearm';
-          mesh(roundedGeometry, skin, arm, [0, -0.53, 0.03], [0.052, 0.07, 0.045]);
+          mesh(limbGeometry, complexion, arm, [0, -0.39, 0.025], [0.046, 0.065, 0.05]).name = 'person-forearm';
+          mesh(roundedGeometry, complexion, arm, [0, -0.53, 0.03], [0.052, 0.07, 0.045]);
           arms.push(arm);
         }
         return { body, legs, arms };
@@ -966,12 +983,13 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         rider.legs.forEach(leg => { leg.rotation.x = -0.9; });
         rider.arms.forEach(arm => { arm.rotation.x = -0.9; });
         mesh(headGeometry, iron, rider.body, [0, 1.57, 0], [1.12, 0.85, 1.12]);
-        bike.userData.lane = { axis: index ? 'z' : 'x', min: -43, max: 1, fixed: 0 };
+        const pose = trafficPose(trafficState.vehicles[traffic.length]);
+        bike.position.set(pose.x, -0.08, pose.z);
+        bike.rotation.y = pose.heading;
         traffic.push(bike);
         vehicleWheels.push(wheels);
-        trafficDistances.push(23 + index * 50);
       }
-      for (const [name, x, z, rotation] of [['doorway', -4.35, -0.93, 0], ['booking', -10.4, -0.38, Math.PI]] as const) {
+      for (const [name, x, z, rotation] of [['doorway', -4.35, -0.93, 0], ['booking', -10.4, -2.6, 0]] as const) {
         const cashier = person(palette.cream);
         cashier.body.name = `cashier-${name}`;
         cashier.body.position.set(x, 0.1, z);
@@ -1029,8 +1047,34 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       mesh(roundedGeometry, bone, chef.body, [0, 1.77, 0], [0.18, 0.11, 0.15]);
       chef.arms[0].name = 'chef-cooking-arm';
       box(brass, [0, -0.64, 0.03], [0.035, 0.3, 0.035], chef.arms[0]).name = 'chef-spatula';
-      const residents = [palette.paper, palette.greenMid, palette.purpleMid].map(person);
-      residents.forEach((resident, index) => { resident.body.name = `pedestrian-${index}`; });
+      const residentRandom = pedestrianRandom();
+      const outfits = [palette.paper, palette.greenMid, palette.purpleMid, palette.cream, sceneColors.timber, sceneColors.trousers];
+      const residents = Array.from({ length: quality > 0 ? pedestrianLimits.desktop : pedestrianLimits.economy }, (_, index) => {
+        const child = index === 5 || index === 9 || index === 15;
+        const scale = child ? 0.62 + residentRandom() * 0.12 : 0.94 + residentRandom() * 0.18;
+        const resident = person(outfits[Math.floor(residentRandom() * outfits.length)], {
+          scale, width: 0.88 + residentRandom() * 0.2,
+          skin: Math.floor(residentRandom() * skinPool.length), hair: Math.floor(residentRandom() * hairPool.length), longHair: index % 3 === 0,
+        });
+        const route = pedestrianRoutes[index === 2 || index === 7 ? 0 : index % pedestrianRoutes.length];
+        const jogging = index === 1 || index === 6 || index === 12;
+        resident.body.name = `pedestrian-${index}`;
+        return { ...resident, route, scale, child, jogging, companion: child ? index - 1 : -1, exercise: index === 7,
+          speed: jogging ? 1.35 + residentRandom() * 0.2 : 0.52 + residentRandom() * 0.2,
+          distance: index === 2 ? 44 : index === 7 ? 33 : residentRandom() * pedestrianRouteLength(route),
+          point: { x: 0, z: 0, heading: 0 },
+        };
+      });
+      residents.forEach(resident => {
+        if (resident.companion < 0) return;
+        const adult = residents[resident.companion];
+        resident.route = adult.route;
+        resident.speed = adult.speed;
+        resident.distance = adult.distance - 0.7;
+      });
+      const pedestrianFrustum = new THREE.Frustum();
+      const pedestrianProjection = new THREE.Matrix4();
+      const pedestrianSphere = new THREE.Sphere(new THREE.Vector3(), 1.5);
       const dog = new THREE.Group();
       dog.name = 'walking-dog';
       scene.add(dog);
@@ -1194,7 +1238,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         { name: 'signature', at: 0.36, position: new THREE.Vector3(0.1, 1.9, -6.2), look: new THREE.Vector3(0, 1.55, -9.65), caption: 'Chảo nóng, làn khói nhẹ và một bữa ngon.' },
         { name: 'feedback', at: 0.54, position: new THREE.Vector3(-7.1, 1.75, -4.8), look: new THREE.Vector3(-12.36, 2.98, -6.45), caption: 'Những khoảnh khắc tại Ngọc Hiếu.' },
         { name: 'menu', at: 0.7, position: new THREE.Vector3(-9.15, 1.85, -6), look: new THREE.Vector3(-10.1, 1.05, -7.1), caption: 'Mở thực đơn, chọn một bữa ngon.' },
-        { name: 'booking', at: 0.79, position: new THREE.Vector3(-8.3, 1.8, -6.2), look: new THREE.Vector3(-10.4, 1.55, -0.38), caption: 'Dành một bàn cho cuộc hẹn của bạn.' },
+        { name: 'booking', at: 0.79, position: new THREE.Vector3(-8.1, 1.8, 0.2), look: new THREE.Vector3(-10.4, 1.55, -2.6), caption: 'Dành một bàn cho cuộc hẹn của bạn.' },
         { name: 'finale', at: 1, position: new THREE.Vector3(-8.3, 1.8, -9.2), look: new THREE.Vector3(-8.3, 1.8, -11.76), caption: 'Ngọc Hiếu · Hẹn nhau một bữa ngon.' },
       ];
       let ao: SSAOPass | undefined;
@@ -1450,42 +1494,17 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         if (diagnostics) diagnosticTime = now;
         const trafficDelta = walkingTime - trafficTime;
         trafficTime = walkingTime;
-        const signalPhase = walkingTime % 20;
+        stepTraffic(trafficState, Math.max(0, trafficDelta));
         trafficSignals.forEach((lights, axis) => {
-          const phase = (signalPhase + axis * 10) % 20;
-          lights.forEach((light, index) => { light.emissiveIntensity = (phase < 8 ? index === 2 : phase < 10 ? index === 1 : index === 0) ? 3 : 0.05; });
+          const signal = trafficSignal(trafficState, axis ? 'z' : 'x');
+          lights.forEach((light, index) => { light.emissiveIntensity = index === (signal === 'green' ? 2 : signal === 'amber' ? 1 : 0) ? 3 : 0.05; });
         });
         traffic.forEach((car, index) => {
-          const lane = car.userData.lane as { axis: string; min: number; max: number; fixed: number };
-          const radius = lane.axis === 'x' ? 1.7 : 1.8;
-          const center = lane.axis === 'x' ? 7.8 : 8.6;
-          const straight = lane.max - lane.min;
-          const arc = Math.PI * radius;
-          const perimeter = 2 * (straight + arc);
-          const oldDistance = trafficDistances[index] % perimeter;
-          const green = (signalPhase + (lane.axis === 'z' ? 10 : 0)) % 20 < 8;
-          const stop = straight - (index >= 4 ? 6 : 3);
-          let advance = trafficDelta * (index >= 4 ? 2.8 : 2.4);
-          if (!green && oldDistance <= stop && oldDistance + advance >= stop) advance = stop - oldDistance;
-          trafficDistances[index] += advance;
-          const distance = trafficDistances[index] % perimeter;
-          vehicleWheels[index].forEach(wheel => { wheel.rotation.x -= advance / 0.29; });
-          let along: number;
-          let across: number;
-          let heading: number;
-          if (distance < straight) {
-            along = lane.min + distance; across = center - radius; heading = Math.PI / 2;
-          } else if (distance < straight + arc) {
-            const angle = (distance - straight) / radius;
-            along = lane.max + Math.sin(angle) * radius; across = center - Math.cos(angle) * radius; heading = Math.PI / 2 - angle;
-          } else if (distance < 2 * straight + arc) {
-            along = lane.max - (distance - straight - arc); across = center + radius; heading = -Math.PI / 2;
-          } else {
-            const angle = (distance - 2 * straight - arc) / radius;
-            along = lane.min - Math.sin(angle) * radius; across = center + Math.cos(angle) * radius; heading = -Math.PI / 2 - angle;
-          }
-          car.position.set(lane.axis === 'x' ? along : across, -0.08, lane.axis === 'x' ? across : along);
-          car.rotation.y = lane.axis === 'x' ? heading : Math.PI / 2 - heading;
+          const vehicle = trafficState.vehicles[index];
+          const pose = trafficPose(vehicle);
+          vehicleWheels[index].forEach(wheel => { wheel.rotation.x = -vehicle.travel / trafficBodies[vehicle.kind].wheelRadius; });
+          car.position.set(pose.x, -0.08, pose.z);
+          car.rotation.y = pose.heading;
         });
         if (diagnostics) container.dataset.traffic = traffic.map(car => `${car.position.x.toFixed(3)},${car.position.z.toFixed(3)}`).join(';');
         tickerTexture.offset.x = reduced ? 0 : (walkingTime * 0.025) % 1;
@@ -1530,22 +1549,26 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
           container.dataset.receptionWave = receptionist.arms[0].rotation.z.toFixed(4);
           container.dataset.hostLift = opening.toFixed(3);
         }
+        camera.updateMatrixWorld();
+        pedestrianProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        pedestrianFrustum.setFromProjectionMatrix(pedestrianProjection);
         residents.forEach((resident, index) => {
-          const phase = walkingTime * 0.47 + index * 5;
-          const distance = ((phase % 16) + 16) % 16;
-          const forward = distance < 8;
-          const along = forward ? distance : 16 - distance;
-          if (index === 1) {
-            resident.body.position.set(4.24, 0.08, -4 + along * 0.85);
-            resident.body.rotation.y = forward ? 0 : Math.PI;
-          } else {
-            resident.body.position.set(-6 + along * 0.4, 0.08, 3.05 + index * 0.19);
-            resident.body.rotation.y = forward ? Math.PI / 2 : -Math.PI / 2;
-          }
-          const stride = Math.sin(walkingTime * 4.5 + index * 2) * 0.36;
-          resident.body.position.y += Math.abs(Math.sin(walkingTime * 4.5 + index * 2)) * 0.025;
+          const distance = resident.distance + walkingTime * (resident.exercise ? 0 : resident.speed);
+          const point = samplePedestrianRoute(resident.route, distance, resident.point);
+          resident.body.position.set(point.x, resident.route.ground, point.z);
+          resident.body.rotation.y = point.heading;
+          pedestrianSphere.center.set(point.x, 0.9, point.z);
+          resident.body.visible = (quality > 0 || index < pedestrianLimits.economy) && pedestrianFrustum.intersectsSphere(pedestrianSphere);
+          if (!resident.body.visible) return;
+          const cadence = resident.speed / resident.scale * (resident.jogging ? 6 : 7);
+          const stride = reduced || resident.exercise ? 0 : Math.sin(walkingTime * cadence + resident.distance) * (resident.jogging ? 0.62 : 0.34);
+          resident.body.position.y += reduced ? 0 : Math.abs(stride) * (resident.jogging ? 0.09 : 0.045);
+          resident.body.rotation.x = resident.jogging ? 0.09 : 0;
           resident.legs.forEach((leg, side) => { leg.rotation.x = side ? stride : -stride; });
-          resident.arms.forEach((arm, side) => { arm.rotation.x = side ? -stride * 0.7 : stride * 0.7; });
+          resident.arms.forEach((arm, side) => {
+            arm.rotation.x = (side ? -stride : stride) * 0.8 - (resident.jogging ? 0.65 : 0);
+            arm.rotation.z = resident.exercise ? (side ? 1 : -1) * (1.8 + (reduced ? 0 : Math.sin(walkingTime * 0.7) * 0.35)) : 0;
+          });
         });
         treeCrowns.forEach((tree, index) => { tree.rotation.z = reduced ? 0 : Math.sin(walkingTime * 0.7 + index) * 0.009; });
         fallingLeaves.forEach((leaf, index) => {
@@ -1556,7 +1579,9 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
           leaf.rotation.set(index + walkingTime * 0.35, walkingTime * 0.45 + index, Math.sin(walkingTime + index) * 0.4);
         });
         const walker = residents[2];
-        dog.position.set(walker.body.position.x, 0.02, 4.15);
+        dog.position.set(walker.body.position.x, walker.route.ground, walker.body.position.z + 0.38);
+        dog.visible = walker.body.visible;
+        leash.visible = walker.body.visible;
         dog.rotation.y = walker.body.rotation.y;
         dogLegs.forEach((leg, index) => { leg.rotation.x = Math.sin(walkingTime * 5.5 + (index === 0 || index === 3 ? 0 : Math.PI)) * 0.28; });
         dogTail.rotation.z = Math.sin(walkingTime * 3) * 0.18;
@@ -1569,7 +1594,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         leashPoints.setXYZ(1, (leashHand.x + leashCollar.x) / 2, Math.min(leashHand.y, leashCollar.y) - 0.1, (leashHand.z + leashCollar.z) / 2);
         leashPoints.setXYZ(2, leashCollar.x, leashCollar.y, leashCollar.z);
         leashPoints.needsUpdate = true;
-        if (import.meta.env.DEV) console.assert(fallingLeaves.length <= 12 && dog.position.z > 3.9, 'Street motion must remain sparse and outside pedestrian lanes');
+        if (import.meta.env.DEV) console.assert(fallingLeaves.length <= 12 && dog.position.z > 2.5 && dog.position.z < 3.8, 'Street motion must remain sparse and inside the sidewalk curb');
         const segment = Math.min(cameraKnots.length - 2, Math.max(0, cameraKnots.findIndex((knot, index) => index > 0 && value <= knot.at) - 1));
         const from = cameraKnots[segment];
         const to = cameraKnots[segment + 1];
