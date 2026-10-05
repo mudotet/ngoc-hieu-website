@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ForkKnife, List, MapPin, Moon, Phone, Sun, X } from '@phosphor-icons/react';
 import { branches, dishes } from './content';
 import { useTheme } from './theme';
+import type { ThemeMode } from './theme';
 
 const RestaurantScene = lazy(() => import('./RestaurantScene'));
 const chapters = ['outside', 'doorway', 'signature', 'feedback', 'menu', 'booking', 'finale'];
@@ -36,10 +37,94 @@ function BookingForm() {
   </form>;
 }
 
-class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+const mobileScenes = [
+  { chapter: 0, label: 'Góc phố', headline: 'Hẹn nhau ở Ngọc Hiếu.', image: 'official-hang-cot-reference.jpg', alt: 'Mặt tiền Ngọc Hiếu Hàng Cót, ảnh chính thức của nhà hàng', detail: 'Một góc phố Hà Nội, một cuộc hẹn bên chảo nóng. Ảnh từ website nhà hàng.' },
+  { chapter: 2, label: 'Chảo nóng', headline: 'Chảo nóng. Vị thân quen.', image: dishes[0].image, alt: dishes[0].name, detail: 'Bít tết truyền thống, chảo gang hình bò và bánh mì nhà làm. Ảnh món ăn từ website nhà hàng.' },
+  { chapter: 4, label: 'Thực đơn', headline: 'Chọn món cho bữa hẹn.', image: 'thuc-don-nhan-hang-bit-tet.jpg', alt: 'Thực đơn bít tết từ website chính thức Ngọc Hiếu', detail: 'Bít tết, mỳ Ý và những lựa chọn cho cả bàn. Mở quyển thực đơn để xem món và giá tham khảo.' },
+];
+
+function MobileJourney({ theme }: { theme: ThemeMode }) {
+  const [stage, setStage] = useState(0);
+  const [enabled, setEnabled] = useState(false);
+  const [restricted, setRestricted] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [ready, setReady] = useState(false);
+  const host = useRef<HTMLElement>(null);
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const details = useRef<HTMLDetailsElement>(null);
+  const scene = mobileScenes[stage];
+  const requestedStage = useRef(0);
+  const manualMode = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const device = navigator as Navigator & { deviceMemory?: number; connection?: EventTarget & { saveData?: boolean } };
+    const update = () => {
+      const limited = motion.matches || Boolean(device.connection?.saveData);
+      setRestricted(limited);
+      if (limited) setReady(false);
+      setEnabled(!limited && (manualMode.current ?? (device.hardwareConcurrency >= 4 && typeof device.deviceMemory === 'number' && device.deviceMemory >= 4)));
+    };
+    update();
+    motion.addEventListener('change', update);
+    device.connection?.addEventListener('change', update);
+    return () => {
+      motion.removeEventListener('change', update);
+      device.connection?.removeEventListener('change', update);
+    };
+  }, []);
+
+  useEffect(() => {
+    const element = host.current;
+    const loaded = () => { setReady(true); window.dispatchEvent(new Event('appready')); };
+    element?.addEventListener('sceneready', loaded);
+    return () => element?.removeEventListener('sceneready', loaded);
+  }, []);
+
+  const move = (index: number) => {
+    const next = Math.max(0, Math.min(mobileScenes.length - 1, index));
+    if (details.current) details.current.open = false;
+    requestedStage.current = next;
+    setStage(next);
+    if (host.current) host.current.dataset.journey = chapters[mobileScenes[next].chapter];
+    host.current?.dispatchEvent(new CustomEvent('storyseek', { detail: { index: mobileScenes[next].chapter } }));
+  };
+  const unavailable = () => { manualMode.current = false; setFailed(true); setEnabled(false); setReady(false); };
+
+
+  return <section ref={host} id="home" className="hero mobile-cinema" data-journey={chapters[scene.chapter]} data-stage={stage} data-motion={restricted ? 'reduced' : 'full'} aria-label="Ba góc nhìn Ngọc Hiếu" aria-roledescription="bộ sưu tập"
+    onTouchStart={event => {
+      if (event.touches.length !== 1 || (event.target as HTMLElement).closest('a, button, details')) { touch.current = null; return; }
+      touch.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    }}
+    onTouchMove={event => {
+      if (touch.current && (event.touches.length !== 1 || Math.abs(event.touches[0].clientY - touch.current.y) > 28)) touch.current = null;
+    }}
+    onTouchCancel={() => { touch.current = null; }}
+    onTouchEnd={event => {
+      const start = touch.current;
+      touch.current = null;
+      if (!start || !event.changedTouches.length) return;
+      const dx = event.changedTouches[0].clientX - start.x;
+      const dy = event.changedTouches[0].clientY - start.y;
+      if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) move(requestedStage.current + (dx < 0 ? 1 : -1));
+    }}>
+    <figure className="mobile-cinema-photo" key={scene.image}><img src={`/images/${scene.image}`} alt={scene.alt} width="700" height="935" fetchPriority={stage === 0 ? 'high' : 'auto'} onLoad={() => window.dispatchEvent(new Event('appready'))} onError={() => window.dispatchEvent(new Event('appready'))} /></figure>
+    {enabled && !failed ? <div className="hero-visual mobile-cinema-scene" data-ready={ready}><SceneBoundary onUnavailable={unavailable}><Suspense fallback={null}><RestaurantScene theme={theme} tourMode="steps" onUnavailable={unavailable} /></Suspense></SceneBoundary></div> : null}
+    <div className="mobile-cinema-tools"><span>{enabled ? ready ? 'Không gian 3D minh họa' : 'Ảnh thật · Đang tải 3D' : 'Ảnh từ nhà hàng'}</span>{!restricted && !failed ? <button type="button" aria-pressed={enabled} onClick={() => { manualMode.current = !enabled; setReady(false); setEnabled(!enabled); }}>{enabled ? 'Dùng ảnh' : 'Bật 3D'}</button> : null}</div>
+    <div className="mobile-cinema-content">
+      <div className="mobile-cinema-heading" aria-live="polite" aria-atomic="true"><span className="mobile-cinema-count">0{stage + 1} / 03 · {scene.label}</span><h1>{scene.headline}</h1></div>
+      {stage === 0 ? <button className="button" type="button" onClick={() => move(1)}>Khám phá chảo nóng <ArrowRight size={18} /></button> : stage === 1 ? <a className="button" href="#dat-ban">Hẹn một bữa ngon <ArrowUpRight size={18} /></a> : <a className="button story-menu-link" href="/thuc-don">Mở quyển thực đơn <ArrowUpRight size={18} /></a>}
+      <details ref={details} className="mobile-cinema-details"><summary>Xem thêm <span className="sr-only">về {scene.label}</span></summary><p>{scene.detail}</p>{failed ? <p role="status">Thiết bị chưa hiển thị được 3D. Bạn đang xem ảnh thật của nhà hàng.</p> : null}</details>
+      <nav className="mobile-cinema-nav" aria-label="Chọn cảnh"><button type="button" aria-label="Cảnh trước" disabled={stage === 0} onClick={() => move(requestedStage.current - 1)}><ArrowRight size={18} style={{ transform: 'rotate(180deg)' }} /></button><div>{mobileScenes.map((item, index) => <button key={item.chapter} type="button" aria-label={`Cảnh ${index + 1}: ${item.label}`} aria-current={stage === index ? 'step' : undefined} onClick={() => move(index)}><span aria-hidden="true" /></button>)}</div><button type="button" aria-label="Cảnh tiếp" disabled={stage === 2} onClick={() => move(requestedStage.current + 1)}><ArrowRight size={18} /></button></nav>
+    </div>
+  </section>;
+}
+
+class SceneBoundary extends Component<{ children: ReactNode; onUnavailable?: () => void }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch() { window.dispatchEvent(new Event('appready')); }
+  componentDidCatch() { this.props.onUnavailable?.(); window.dispatchEvent(new Event('appready')); }
   render() { return this.state.failed ? <div className="scene-message">Không thể tải không gian 3D. Bạn vẫn có thể khám phá thực đơn bên dưới.</div> : this.props.children; }
 }
 
@@ -47,18 +132,15 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [category, setCategory] = useState('Tất cả');
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
-  const [mobileTourEnabled, setMobileTourEnabled] = useState(false);
   const [chapter, setChapter] = useState(0);
-  const tourToggle = useRef<HTMLButtonElement>(null);
   const chapterDetails = useRef<HTMLDetailsElement>(null);
   const requestedChapter = useRef(0);
-  const sceneEnabled = !mobile || mobileTourEnabled;
+  const sceneEnabled = !mobile;
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
     const change = () => {
       setMobile(media.matches);
-      setMobileTourEnabled(false);
       setChapter(0); requestedChapter.current = 0;
     };
     media.addEventListener('change', change);
@@ -116,7 +198,7 @@ export default function App() {
     };
     element?.addEventListener('storychapter', change);
     return () => element?.removeEventListener('storychapter', change);
-  }, []);
+  }, [mobile]);
 
   useEffect(() => {
     const overlay = hero.current?.querySelector<HTMLElement>('.story-overlay');
@@ -153,16 +235,10 @@ export default function App() {
     </header>
 
     <main id="main">
-      <section ref={hero} id="home" data-journey={chapters[chapter]} className={`hero ${sceneEnabled ? 'cinematic-story' : 'mobile-home'}${mobile && mobileTourEnabled ? ' mobile-tour' : ''}`} aria-label={sceneEnabled ? 'Hành trình bảy chương tại Ngọc Hiếu' : 'Nhà hàng Ngọc Hiếu'}>
-        {mobile && !mobileTourEnabled ? <div className="mobile-hero">
-          <div className="mobile-hero-copy"><span className="eyebrow">Bít tết · Từ 1988</span><h1>Hẹn nhau ở<br /><span>Ngọc Hiếu.</span></h1><p>Chảo nóng trên bàn. Một bữa ngon giữa lòng Hà Nội.</p><div className="mobile-hero-actions"><a className="button" href="/thuc-don">Xem menu <ArrowUpRight size={20} /></a><a className="text-link" href="#dat-ban">Đặt bàn <ArrowRight size={20} /></a></div></div>
-          <figure className="mobile-hero-photo"><img src="/images/official-hang-cot-reference.jpg" alt="Mặt tiền Ngọc Hiếu Hàng Cót, ảnh chính thức của nhà hàng" width="700" height="935" fetchPriority="high" /><figcaption>Ngọc Hiếu Hàng Cót · Ảnh từ website nhà hàng</figcaption></figure>
-          <div className="mobile-tour-invite"><div><strong>Một vòng quanh quán</strong><p>Trải nghiệm 3D minh họa, chỉ tải khi bạn chọn.</p></div><button ref={tourToggle} className="text-link" onClick={() => { setChapter(0); requestedChapter.current = 0; setMobileTourEnabled(true); }}>Khám phá quán <ArrowRight size={20} /></button></div>
-        </div> : null}
+      {mobile ? <MobileJourney theme={theme} /> : <section ref={hero} id="home" data-journey={chapters[chapter]} className="hero cinematic-story" aria-label={sceneEnabled ? 'Hành trình bảy chương tại Ngọc Hiếu' : 'Nhà hàng Ngọc Hiếu'}>
         {sceneEnabled ? <>
           <div className="hero-visual"><SceneBoundary><Suspense fallback={<div className="scene-loading" role="status"><span>Đang mở cửa nhà hàng...</span></div>}><RestaurantScene theme={theme} tourMode={mobile ? 'steps' : 'scroll'} /></Suspense></SceneBoundary></div>
-          {mobile ? <button className="story-skip tour-close" autoFocus onClick={() => { setMobileTourEnabled(false); setChapter(0); requestedChapter.current = 0; requestAnimationFrame(() => tourToggle.current?.focus({ preventScroll: true })); }}>Đóng khám phá <X size={18} /></button> : <a className="story-skip" href="#cau-chuyen">Bỏ qua hành trình <ArrowDownRight size={18} /></a>}
-          {mobile ? <nav className="tour-steps" aria-label="Các chương câu chuyện"><button type="button" disabled={chapter === 0} onClick={() => seek(requestedChapter.current - 1)}>Chương trước</button><span aria-live="polite">{chapter + 1} / 7</span><button type="button" disabled={chapter === chapters.length - 1} onClick={() => seek(requestedChapter.current + 1)}>Chương tiếp</button></nav> : null}
+          <a className="story-skip" href="#cau-chuyen">Bỏ qua hành trình <ArrowDownRight size={18} /></a>
           <div className="story-overlay" onWheel={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()}>
             <article className="chapter-panel" data-chapter={chapter} aria-labelledby={`chapter-title-${chapter}`}>
               <span className="eyebrow">0{chapter + 1} / 07 · {chapterLabels[chapter]}</span>
@@ -187,7 +263,7 @@ export default function App() {
           <p className="story-disclaimer">Không gian 3D minh họa · Ảnh thật được ghi nguồn riêng.</p>
           {!mobile ? <nav className="chapter-nav" aria-label="Các chương câu chuyện"><div className="story-progress" aria-hidden="true" />{chapterLabels.map((label, index) => <button key={label} type="button" aria-label={`Chương ${index + 1}: ${label}`} aria-current={chapter === index ? 'step' : undefined} onClick={() => seek(index)}><span>0{index + 1}</span><span className="chapter-nav-label">{label}</span></button>)}</nav> : null}
         </> : null}
-      </section>
+      </section>}
 
       <section className="welcome wrap reveal" aria-label="Lời chào từ Ngọc Hiếu"><span className="welcome-symbol"><ForkKnife size={28} weight="light" /></span><p>Chảo nóng trên bàn.<br /><strong>Câu chuyện bắt đầu.</strong></p><a href="#cau-chuyen" className="round-link" aria-label="Khám phá câu chuyện Ngọc Hiếu"><ArrowDownRight size={28} /></a></section>
 

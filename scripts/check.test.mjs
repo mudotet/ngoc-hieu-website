@@ -416,21 +416,24 @@ test('restaurant identity, photography and booking stay intact', () => {
   assert.match(read('src/theme.ts'), /#1F9D55/);
   assert.match(app, /<RestaurantScene theme=\{theme\}/);
   assert.match(css, /height:100dvh/);
-  assert.equal((app.match(/<RestaurantScene /g) || []).length, 1);
+  assert.equal((app.match(/<RestaurantScene /g) || []).length, 2);
   assert.match(app, /cinematic-story[\s\S]*<RestaurantScene[\s\S]*<\/section>/);
   assert.doesNotMatch(app, /className="journey wrap"/);
 });
 
 test('mobile homepage makes 3D optional and keeps details collapsed', () => {
   const app = read('src/App.tsx');
-  assert.match(app, /const sceneEnabled = !mobile \|\| mobileTourEnabled/);
-  assert.match(app, /sceneEnabled \? <>/);
-  assert.match(app, /tourMode=\{mobile \? 'steps' : 'scroll'\}/);
-  assert.match(app, /mobile-hero-photo/);
-  assert.match(app, /Khám phá quán/);
+  assert.match(app, /function MobileJourney/);
+  assert.match(app, /mobile \? <MobileJourney theme=\{theme\}/);
+  assert.match(app, /tourMode="steps"/);
+  assert.match(app, /mobile-cinema-photo/);
+  assert.match(app, /device.hardwareConcurrency >= 4/);
+  assert.match(app, /device.deviceMemory >= 4/);
+  assert.match(app, /motion.matches \|\| Boolean\(device.connection\?\.saveData\)/);
   assert.match(app, /mobile-bottom-nav/);
-  assert.match(app, /seek\(requestedChapter.current \+ 1\)/);
-  assert.ok(app.indexOf('className="tour-steps"') < app.indexOf('className="story-overlay"'), 'mobile navigation must precede details in normal flow');
+  assert.match(app, /move\(requestedStage.current \+ 1\)/);
+  const mobileScenes = app.match(/const mobileScenes = \[([\s\S]*?)\n\];/)[1];
+  assert.deepEqual([...mobileScenes.matchAll(/chapter: (\d)/g)].map(match => Number(match[1])), [0, 2, 4]);
   assert.match(read('src/style.css'), /\.mobile-tour \.tour-steps\{position:relative;bottom:auto;order:2/);
   assert.match(app, /<details className="booking-disclosure"/);
   assert.match(read('src/style.css'), /@media\(max-width:767px\) and \(max-height:650px\)\{\.mobile-tour \.hero-visual\{height:140px\}/);
@@ -441,6 +444,23 @@ test('mobile homepage makes 3D optional and keeps details collapsed', () => {
   assert.match(scene, /const ambientOcclusion = !dark/);
   assert.match(scene, /tourMode === 'scroll' && chapter.dataset.journey !== stage.name/);
   assert.match(scene, /tourMode === 'steps' && requestedStage >= 0/);
+});
+
+test('mobile auto-3D respects hardware and motion preferences', () => {
+  const source = read('src/App.tsx');
+  const policy = source.match(/setEnabled\((!limited && \(manualMode.current[^;]+)\);/)[1];
+  const evaluate = new Function('device', 'limited', 'manualMode', `return ${policy}`);
+  const eligible = (device, limited) => evaluate(device, limited, { current: null });
+  assert.equal(evaluate({ hardwareConcurrency: 8, deviceMemory: 8 }, false, { current: false }), false);
+  assert.equal(evaluate({ hardwareConcurrency: 2 }, false, { current: true }), true);
+  assert.equal(evaluate({ hardwareConcurrency: 8, deviceMemory: 8 }, true, { current: true }), false);
+  assert.equal(eligible({ hardwareConcurrency: 8, deviceMemory: 8 }, false), true);
+  for (const device of [{ hardwareConcurrency: 2, deviceMemory: 8 }, { hardwareConcurrency: 8, deviceMemory: 2 }, { hardwareConcurrency: 8 }]) assert.equal(eligible(device, false), false);
+  assert.equal(eligible({ hardwareConcurrency: 8, deviceMemory: 8 }, true), false);
+  assert.match(source, /Math.abs\(dx\) > Math.abs\(dy\) \* 1.5/);
+  assert.match(source, /Math.abs\(event.touches\[0\].clientY - touch.current.y\) > 28/);
+  const scene = read('src/RestaurantScene.tsx');
+  assert.equal((scene.match(/unavailable.current\?\.\(\)/g) || []).length, 2);
 });
 
 test('mobile menu defaults to a list and makes the book opt-in', () => {

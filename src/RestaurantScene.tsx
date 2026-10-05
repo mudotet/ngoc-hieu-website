@@ -31,11 +31,13 @@ const sceneLighting = {
 
 const aoIntensity = (progress: number) => sceneLighting.ao * THREE.MathUtils.smoothstep(progress, 0.24, 0.3) * (1 - THREE.MathUtils.smoothstep(progress, 0.82, 0.88));
 
-export default function RestaurantScene({ entered = false, onEntered, theme, tourMode = 'scroll' }: { entered?: boolean; onEntered?: () => void; theme: ThemeMode; tourMode?: 'scroll' | 'steps' }) {
+export default function RestaurantScene({ entered = false, onEntered, onUnavailable, theme, tourMode = 'scroll' }: { entered?: boolean; onEntered?: () => void; onUnavailable?: () => void; theme: ThemeMode; tourMode?: 'scroll' | 'steps' }) {
   const themeRef = useRef(theme);
   const applyTheme = useRef<((mode: ThemeMode) => void) | null>(null);
   const host = useRef<HTMLDivElement>(null);
   const callback = useRef(onEntered);
+  const unavailable = useRef(onUnavailable);
+  useEffect(() => { unavailable.current = onUnavailable; }, [onUnavailable]);
   const controls = useRef<((value: boolean) => void) | null>(null);
   const [failed, setFailed] = useState(false);
   const previousEntered = useRef(entered);
@@ -112,6 +114,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       const wasInStory = rect.top <= 1 && rect.bottom > 0;
       setFailed(true);
       cleanup();
+      unavailable.current?.();
       if (tourMode === 'scroll' && wasInStory) window.scrollTo({ top: window.scrollY + chapter.getBoundingClientRect().top, behavior: 'instant' });
     };
 
@@ -1878,6 +1881,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
     } catch {
       cleanup();
       setFailed(true);
+      unavailable.current?.();
     }
     return cleanup;
   }, [tourMode]);
