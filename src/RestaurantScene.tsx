@@ -256,10 +256,10 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       const connector = new THREE.Group();
       connector.name = 'connector-opening';
       connector.position.set(-5.5, 1.43, -4.8);
-      connector.userData.clearance = { width: 2, height: 2.66, axis: 'z' };
+      connector.userData.clearance = { width: 1.98, height: 2.6, axis: 'z' };
       rightBuilding.add(connector);
-      for (const z of [-5.83, -3.77]) box(brass, [-5.5, 1.43, z], [0.3, 2.66, 0.06], rightBuilding);
-      box(brass, [-5.5, 2.78, -4.8], [0.3, 0.06, 2.12], rightBuilding);
+      for (const z of [-5.82, -3.78]) box(brass, [-5.5, 1.4, z], [0.3, 2.6, 0.06], rightBuilding);
+      box(brass, [-5.5, 2.73, -4.8], [0.3, 0.06, 2.1], rightBuilding);
       const leftPlaster = material(tint(palette.greenMid, 0.6));
       structure(leftPlaster, [-12.5, 1.9, -5], [0.22, 3.8, 14], leftBuilding).name = 'left-outer-wall';
       structure(leftPlaster, [-9, 1.9, -12], [7, 3.8, 0.22], leftBuilding).name = 'left-back-wall';
@@ -302,7 +302,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       connectingDoor.userData.openAngle = Math.PI;
       rightBuilding.add(connectingDoor);
       for (const y of [0.055, 2.575]) box(doorPaint, [0, y, 0.94], [0.1, 0.11, 1.88], connectingDoor);
-      for (const z of [0.045, 1.835]) box(doorPaint, [0, 1.315, z], [0.1, 2.52, 0.09], connectingDoor);
+      for (const z of [0.045, 1.835]) box(doorPaint, [0, 1.315, z], [0.1, 2.41, 0.09], connectingDoor);
       box(glass, [0, 1.315, 0.94], [0.035, 2.41, 1.7], connectingDoor).name = 'interior-connecting-door-glass';
       box(brass, [-0.09, 1.22, 1.68], [0.035, 0.38, 0.035], connectingDoor).name = 'interior-connecting-door-handle';
       for (const y of [0.34, 2.25]) box(brass, [0, y, 0], [0.12, 0.12, 0.12], connectingDoor);
@@ -352,9 +352,9 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         box(bone, [-5.04, y, -1.75], [0.5, 0.075, 1.45]);
         for (let i = 0; i < 4; i++) box(i % 2 ? accent : brass, [-5.04, y + 0.2, -2.25 + i * 0.28], [0.24, 0.32, 0.1]);
       }
-      box(timber, [-4.4, 0.38, -3.6], [1.45, 0.55, 1.7]).name = 'reception-waiting-bench';
-      box(accent, [-4.4, 0.74, -3.6], [1.43, 0.15, 1.68]);
-      box(accent, [-5.02, 1.225, -3.6], [0.15, 0.8, 1.68]);
+      box(timber, [-4, 0.38, -3.15], [1.45, 0.55, 1.7]).name = 'reception-waiting-bench';
+      box(accent, [-4, 0.74, -3.15], [1.43, 0.15, 1.68]);
+      box(accent, [-4.62, 1.225, -3.15], [0.15, 0.8, 1.68]);
       const sideFacade = new THREE.Group();
       sideFacade.name = 'facade-side';
       sideFacade.position.set(3.5, 0, -1);
@@ -383,10 +383,10 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       for (const side of [-1, 1]) {
         box(timber, [side * 3.33, 0.65, -7.7], [0.12, 1.1, 4.2]).name = 'interior-wood-wainscot';
         for (let z = -9.5; z < -5.8; z += 0.3) box(brass, [side * 3.25, 0.65, z], [0.02, 1, 0.025]);
-        box(timber, [side * 2.65, 0.36, -6.9], [1.05, 0.55, 3.3]).name = 'lounge-banquette';
-        box(accent, [side * 2.62, 0.69, -6.9], [1.02, 0.18, 3.24]);
-        box(accent, [side * 3.04, 1.1, -6.9], [0.18, 0.85, 3.24]);
-        for (const z of [-5.9, -7.7]) {
+        box(timber, [side * 2.65, 0.36, -7.25], [1.05, 0.55, 3.3]).name = 'lounge-banquette';
+        box(accent, [side * 2.62, 0.69, -7.25], [1.02, 0.18, 3.24]);
+        box(accent, [side * 3.04, 1.1, -7.25], [0.18, 0.85, 3.24]);
+        for (const z of [-6.25, -8.05]) {
           box(timber, [side * 1.85, 0.95, z], [0.95, 0.1, 1.05]).name = 'lounge-table';
           cylinder(iron, [side * 1.85, 0.48, z], [0.055, 0.9, 0.055]);
         }
@@ -615,7 +615,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         materials.add(finish);
         return finish;
       });
-      for (const x of [-1.9, 1.9]) {
+      for (const x of [-2.06, 2.06]) {
         cylinder(timber, [x, 1, -1.2], [0.8, 0.12, 0.8]);
         cylinder(iron, [x, 0.5, -1.2], [0.06, 1, 0.06]);
         cylinder(iron, [x, 0.08, -1.2], [0.42, 0.08, 0.42]);
@@ -650,9 +650,9 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         cylinder(brass, [x, 2.9, -1.2], [0.015, 0.7, 0.015]);
         cylinder(iron, [x, 2.5, -1.2], [0.3, 0.14, 0.3]);
       }
-      box(timber, [-2.65, 0.6, -3.65], [1.1, 1.2, 1.7]).name = 'interior-service-alcove';
-      box(bone, [-2.65, 1.24, -3.65], [1.2, 0.1, 1.85]);
-      for (let z = -4.35; z < -2.9; z += 0.2) box(brass, [-2.08, 0.6, z], [0.02, 1, 0.02]);
+      box(timber, [-2.65, 0.6, -3.05], [1.1, 1.2, 1.7]).name = 'interior-service-alcove';
+      box(bone, [-2.65, 1.24, -3.05], [1.2, 0.1, 1.85]);
+      for (let z = -3.75; z < -2.3; z += 0.2) box(brass, [-2.08, 0.6, z], [0.02, 1, 0.02]);
       const signCanvas = document.createElement('canvas');
       signCanvas.width = 1536;
       signCanvas.height = 384;
@@ -828,7 +828,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       backdropTrees.addLevel(canopyGroup, 0);
       backdropTrees.addLevel(new THREE.Group(), 95);
       scene.add(backdropTrees);
-      for (const [x, z] of [[-3.1, 2.55], [3.95, -4.45], [-2.8, -8.9], [2.8, -8.9], [2.9, -3.8]]) {
+      for (const [x, z] of [[-3.1, 2.55], [3.95, -4.45], [-2.8, -9.25], [2.8, -9.25], [2.9, -3.8]]) {
         cylinder(timber, [x, 0.25, z], [0.24, 0.38, 0.24]);
         cylinder(iron, [x, 0.62, z], [0.025, 0.6, 0.025]);
         mesh(foliageGeometry, leaves, scene, [x, 0.96, z], [0.34, 0.45, 0.32]);
@@ -1699,7 +1699,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         if (active) frame = requestAnimationFrame(animate);
         render();
       };
-      const profileTexture = new THREE.TextureLoader().load('/images/ngoc-hieu-facebook-profile.jpg', loaded => {
+      const profileTexture = new THREE.TextureLoader().load('/images/ngoc-hieu-logo-white.jpg', loaded => {
         if (disposed) { loaded.dispose(); return; }
         loaded.colorSpace = THREE.SRGBColorSpace;
         const image = loaded.image as HTMLImageElement;

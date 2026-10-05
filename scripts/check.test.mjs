@@ -7,6 +7,17 @@ import ts from 'typescript';
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 
+test('visible logo surfaces use only the approved original JPEG', () => {
+  assert.ok(existsSync(new URL('public/images/ngoc-hieu-logo-white.jpg', root)));
+  for (const path of ['index.html', 'src/App.tsx', 'src/MenuBook3D.tsx', 'src/RestaurantScene.tsx']) {
+    const source = read(path);
+    assert.match(source, /\/images\/ngoc-hieu-logo-white\.jpg/, path);
+    assert.doesNotMatch(source, /logo-bit-tet-ngoc-hieu\.png|ngoc-hieu-facebook-profile\.jpg/, path);
+  }
+  assert.match(read('index.html'), /rel="icon" type="image\/jpeg" href="\/images\/ngoc-hieu-logo-white\.jpg"/);
+  assert.match(read('src/MenuBook3D.tsx'), /logo\.context\.fillStyle = 'white'/);
+});
+
 test('shared theme text and controls meet WCAG AA in both modes', () => {
   const module = { exports: {} };
   const compiled = ts.transpileModule(read('src/theme.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
@@ -136,6 +147,69 @@ test('bench cushions and backs do not overlap coplanar exterior faces', () => {
   }
 });
 
+const connectorGeometry = async () => {
+  const THREE = await import('three');
+  const source = read('src/RestaurantScene.tsx');
+  const slice = (start, end) => {
+    const from = source.indexOf(start);
+    const to = source.indexOf(end, from);
+    assert.ok(from >= 0 && to > from, `Missing geometry slice ${start}`);
+    return source.slice(from, to);
+  };
+  const code = `
+    const scene = new THREE.Scene();
+    const finish = new THREE.MeshBasicMaterial();
+    const wall = finish, brass = finish, timber = finish, accent = finish, bone = finish, iron = finish, glass = finish, doorPaint = finish, ceramic = finish, steak = finish, char = finish, eggWhite = finish, yolk = finish, garnish = finish;
+    const palette = { amber: 0 }, interiorLights = [], steamMaterials = [], steamWisps = [];
+    const material = () => finish, tint = () => 0, surface = null;
+    const boxGeometry = new THREE.BoxGeometry(1, 1, 1), cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 32), roundedGeometry = new THREE.SphereGeometry(1), plateRimGeometry = new THREE.TorusGeometry(0.2, 0.025);
+    const mesh = (geometry, mat, parent, position, scale) => {
+      const object = new THREE.Mesh(geometry, mat);
+      object.position.fromArray(position); object.scale.fromArray(scale); parent.add(object); return object;
+    };
+    const box = (mat, position, scale, parent = scene) => mesh(boxGeometry, mat, parent, position, scale);
+    const cylinder = (mat, position, scale) => mesh(cylinderGeometry, mat, scene, position, scale);
+    ${slice('const rightBuilding =', 'const sideFacade =')}
+    ${slice('box(wall, [-1, 1.6, -12]', 'for (const z of [-4.6, -7.5])')}
+    ${slice(source.match(/for \(const x of \[[^\]]+\]\) \{\s*cylinder\(timber, \[x, 1, -1.2\]/)[0], 'const signCanvas =')}
+    scene.updateMatrixWorld(true);
+    return { scene, connectingDoor, rightBuilding };
+  `.replaceAll('import.meta.env.DEV', 'false');
+  const compiled = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  return { THREE, ...new Function('THREE', compiled)(THREE) };
+};
+
+test('actual furniture leaves 1.5m connector approaches and main hallway clear', async () => {
+  const { THREE, scene } = await connectorGeometry();
+  const passages = [
+    new THREE.Box3(new THREE.Vector3(-8, 0.15, -5.55), new THREE.Vector3(0.75, 2.5, -4.05)),
+    new THREE.Box3(new THREE.Vector3(-0.75, 0.15, -8.6), new THREE.Vector3(0.75, 2.5, 1)),
+  ];
+  const collisions = [];
+  scene.traverse(object => {
+    if (!object.isMesh) return;
+    const bounds = new THREE.Box3().setFromObject(object);
+    if (passages.some(passage => passage.intersectsBox(bounds))) collisions.push(`${object.name || 'mesh'}: ${bounds.min.toArray()} / ${bounds.max.toArray()}`);
+  });
+  assert.deepEqual(collisions, []);
+});
+
+test('actual connector trim and folded leaf have no overlapping coplanar exposed faces', async () => {
+  const { THREE, rightBuilding, connectingDoor } = await connectorGeometry();
+  const boxes = rightBuilding.children.filter(object => object.isMesh && object.position.x === -5.5);
+  connectingDoor.traverse(object => { if (object.isMesh) boxes.push(object); });
+  assert.ok(boxes.length >= 10);
+  const bounds = boxes.map(object => new THREE.Box3().setFromObject(object));
+  for (let i = 0; i < bounds.length; i++) for (let j = i + 1; j < bounds.length; j++) {
+    for (const axis of ['x', 'y', 'z']) for (const face of ['min', 'max']) {
+      const others = ['x', 'y', 'z'].filter(value => value !== axis);
+      const coplanar = Math.abs(bounds[i][face][axis] - bounds[j][face][axis]) < 1e-6;
+      const overlap = others.every(value => Math.min(bounds[i].max[value], bounds[j].max[value]) - Math.max(bounds[i].min[value], bounds[j].min[value]) > 1e-6);
+      assert.ok(!coplanar || !overlap, `parts ${i}/${j}: overlapping ${face}.${axis} faces at ${bounds[i][face][axis]}`);
+    }
+  }
+});
+
 test('wall photo lower edges stay above the lounge backrest sightline', async () => {
   const THREE = await import('three');
   const source = read('src/RestaurantScene.tsx');
@@ -195,7 +269,7 @@ test('restaurant identity, photography and booking stay intact', () => {
   assert.match(app, /Nhà hàng Ngọc Hiếu/);
   assert.match(app, /tel:0933446996/);
   assert.match(app, /mailto:bittetngochieu@gmail.com/);
-  assert.match(app, /ngoc-hieu-facebook-profile\.jpg/);
+  assert.match(app, /ngoc-hieu-logo-white\.jpg/);
   assert.match(app, /href="\/thuc-don"/);
   assert.match(app, /loading="lazy" decoding="async"/);
   assert.match(app, /menuToggle.current\?\.focus\(\)/);
@@ -586,7 +660,7 @@ test('copy and animation respect design constraints', () => {
   assert.match(scene, /welcome-board/);
   assert.match(scene, /facade-side/);
   assert.match(scene, /pedestrian-/);
-  assert.match(scene, /ngoc-hieu-facebook-profile\.jpg/);
+  assert.match(scene, /ngoc-hieu-logo-white\.jpg/);
   assert.match(scene, /facade-ticker-/);
   assert.match(scene, /CapsuleGeometry/);
   assert.match(scene, /food-steak/);

@@ -132,7 +132,7 @@ const MenuBook3D = forwardRef<MenuBookHandle, Props>(function MenuBook3D(props, 
       logo.context.fillStyle = palette.purple; logo.context.fillRect(0, 0, 512, 512);
       logo.context.strokeStyle = palette.amber; logo.context.lineWidth = 2;
       logo.context.strokeRect(26, 26, 460, 460);
-      logo.context.fillStyle = palette.amber; logo.context.textAlign = 'center';
+      logo.context.fillStyle = 'white'; logo.context.textAlign = 'center';
       logo.context.font = '32px "Be Vietnam Pro", sans-serif'; logo.context.fillText('BÍT TẾT', 256, 176);
       logo.context.font = 'bold 48px "Be Vietnam Pro", sans-serif'; logo.context.fillText('NGỌC HIẾU', 256, 248);
       logo.context.font = '20px "Be Vietnam Pro", sans-serif'; logo.context.fillText('THỰC ĐƠN', 256, 340);
@@ -163,7 +163,7 @@ const MenuBook3D = forwardRef<MenuBookHandle, Props>(function MenuBook3D(props, 
         coverReady = true; refresh.current?.();
       };
       officialLogo.onerror = () => { images.delete(officialLogo); coverReady = true; refresh.current?.(); };
-      officialLogo.src = '/images/logo-bit-tet-ngoc-hieu.png';
+      officialLogo.src = '/images/ngoc-hieu-logo-white.jpg';
       const leather = ownMaterial(new THREE.MeshStandardMaterial({ color: palette.purple, roughness: 0.72, normalMap: paperNormal, normalScale: new THREE.Vector2(0.4, 0.4) }));
       const pageBlock = ownMaterial(new THREE.MeshStandardMaterial({ color: palette.paper, roughness: 0.93 }));
       const makeBox = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z = 0) => {

@@ -141,7 +141,7 @@ export default function App() {
   return <div ref={root} className="site" data-theme={theme}>
     <a className="skip-link" href="#main">Đến nội dung chính</a>
     <header className="header wrap">
-      <a className="brand" href="#home" aria-label="Ngọc Hiếu, trang chủ"><img src="/images/ngoc-hieu-facebook-profile.jpg" alt="" width="48" height="48" /><span className="brand-wordmark">Ngọc Hiếu<small>Bít tết · Từ 1988</small></span></a>
+      <a className="brand" href="#home" aria-label="Ngọc Hiếu, trang chủ"><img src="/images/ngoc-hieu-logo-white.jpg" alt="" width="48" height="48" /><span className="brand-wordmark">Ngọc Hiếu<small>Bít tết · Từ 1988</small></span></a>
       <nav className={menuOpen ? 'navigation open' : 'navigation'} aria-label="Điều hướng chính" id="navigation">
         {nav.map(([label, href]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}</a>)}
       </nav>
