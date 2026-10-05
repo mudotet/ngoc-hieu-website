@@ -61,6 +61,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
     let intersection: IntersectionObserver | undefined;
     let visible = false;
     let disposed = false;
+    let readyEmitted = false;
     let frame = 0;
     let lastFrame = 0;
     let walkingTime = 0;
@@ -1161,12 +1162,12 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         materials.add(photoMaterial);
         const picture = new THREE.Mesh(badgeGeometry, photoMaterial);
         picture.name = `interior-official-photo-${index}`;
-        picture.position.set(-12.36, 2.02, -5.4 - index * 2.1);
+        picture.position.set(-12.36, 2.98, -5.4 - index * 2.1);
         picture.rotation.y = Math.PI / 2;
         picture.scale.set(ratio * 1.15, 1.15, 1);
         picture.visible = false;
         scene.add(picture);
-        box(brass, [-12.4, 2.02, picture.position.z], [0.06, 1.27, ratio * 1.15 + 0.12]);
+        box(brass, [-12.4, picture.position.y, picture.position.z], [0.06, 1.27, ratio * 1.15 + 0.12]);
         const photo = new THREE.TextureLoader().load(path, loaded => {
           if (disposed) { loaded.dispose(); return; }
           loaded.colorSpace = THREE.SRGBColorSpace;
@@ -1191,7 +1192,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         { name: 'outside', at: 0, position: new THREE.Vector3(-14, 12, 10), look: new THREE.Vector3(-4.5, 2, -3), caption: 'Từ một lời hẹn, đến một bàn ăn.' },
         { name: 'doorway', at: 0.2, position: new THREE.Vector3(0, 2.15, 4.5), look: new THREE.Vector3(0, 1.65, -3), caption: 'Cửa đã mở. Mời bạn ghé vào.' },
         { name: 'signature', at: 0.36, position: new THREE.Vector3(0.1, 1.9, -6.2), look: new THREE.Vector3(0, 1.55, -9.65), caption: 'Chảo nóng, làn khói nhẹ và một bữa ngon.' },
-        { name: 'feedback', at: 0.54, position: new THREE.Vector3(-7.1, 1.75, -4.8), look: new THREE.Vector3(-12.36, 2.02, -5.4), caption: 'Những khoảnh khắc tại Ngọc Hiếu.' },
+        { name: 'feedback', at: 0.54, position: new THREE.Vector3(-7.1, 1.75, -4.8), look: new THREE.Vector3(-12.36, 2.98, -6.45), caption: 'Những khoảnh khắc tại Ngọc Hiếu.' },
         { name: 'menu', at: 0.7, position: new THREE.Vector3(-9.15, 1.85, -6), look: new THREE.Vector3(-10.1, 1.05, -7.1), caption: 'Mở thực đơn, chọn một bữa ngon.' },
         { name: 'booking', at: 0.79, position: new THREE.Vector3(-8.3, 1.8, -6.2), look: new THREE.Vector3(-10.4, 1.55, -0.38), caption: 'Dành một bàn cho cuộc hẹn của bạn.' },
         { name: 'finale', at: 1, position: new THREE.Vector3(-8.3, 1.8, -9.2), look: new THREE.Vector3(-8.3, 1.8, -11.76), caption: 'Ngọc Hiếu · Hẹn nhau một bữa ngon.' },
@@ -1630,6 +1631,11 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         gl.info.reset();
         if (quality && composer) composer.render();
         else gl.render(scene, camera);
+        if (!readyEmitted) {
+          readyEmitted = true;
+          chapter.dataset.sceneReady = 'true';
+          chapter.dispatchEvent(new CustomEvent('sceneready', { bubbles: true }));
+        }
         renderedFrames++;
         drawCalls += gl.info.render.calls;
         triangles += gl.info.render.triangles;

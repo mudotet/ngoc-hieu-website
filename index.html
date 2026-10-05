@@ -11,9 +11,97 @@
     <meta property="og:type" content="website" />
     <link rel="icon" type="image/jpeg" href="/images/ngoc-hieu-facebook-profile.jpg" />
     <title>Nhà hàng Ngọc Hiếu | Hẹn nhau một bữa ngon</title>
+    <style>
+      #arrival { display: none; }
+      html.arrival-pending, html.arrival-pending body { overflow: hidden; }
+      html.arrival-pending #arrival, #arrival.is-leaving { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow: hidden; color: #FFF6E5; font-family: 'Be Vietnam Pro', system-ui, sans-serif; }
+      .arrival-cloud { position: absolute; inset: -15% 48% -15% -20%; background: #2A1650; transition: transform 1s cubic-bezier(.65,0,.25,1), opacity 1s ease; }
+      .arrival-cloud.right { inset: -15% -20% -15% 48%; background: #4B2A8A; }
+      .arrival-cloud::before, .arrival-cloud::after { content: ''; position: absolute; width: 62%; height: 65%; right: -22%; top: 4%; border-radius: 50%; background: inherit; }
+      .arrival-cloud::after { top: 44%; right: -15%; width: 75%; height: 62%; }
+      .arrival-cloud.right::before { right: auto; left: -20%; top: -4%; }
+      .arrival-cloud.right::after { right: auto; left: -25%; top: 48%; }
+      .arrival-brand { position: relative; text-align: center; padding: 24px; transition: opacity .3s ease; }
+      .arrival-brand img { display: block; width: clamp(150px, 25vw, 230px); height: auto; margin: 0 auto 26px; }
+      .arrival-brand p { font-size: clamp(16px, 2vw, 21px); line-height: 1.5; margin: 0 0 18px; }
+      .arrival-brand [role=status] { font-size: 13px; }
+      .arrival-brand button { display: block; margin: 24px auto 0; padding: 10px 16px; border: 1px solid currentColor; border-radius: 24px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+      .arrival-brand button:focus-visible { outline: 3px solid #FFF6E5; outline-offset: 5px; }
+      #arrival.is-leaving { pointer-events: none; }
+      #arrival.is-leaving .arrival-brand { opacity: 0; }
+      #arrival.is-leaving .arrival-cloud { transform: translateX(-125%); opacity: 0; }
+      #arrival.is-leaving .arrival-cloud.right { transform: translateX(125%); }
+      @media (prefers-reduced-motion: reduce) {
+        .arrival-cloud, .arrival-brand { transition: none; }
+        #arrival.is-leaving .arrival-cloud, #arrival.is-leaving .arrival-cloud.right { transform: none; opacity: 0; }
+      }
+    </style>
   </head>
   <body>
+    <div id="arrival" aria-label="Chào mừng đến Ngọc Hiếu">
+      <div class="arrival-cloud" aria-hidden="true"></div><div class="arrival-cloud right" aria-hidden="true"></div>
+      <div class="arrival-brand">
+        <img src="/images/logo-bit-tet-ngoc-hieu.png" alt="Bít Tết Ngọc Hiếu" width="230" height="230" fetchpriority="high" />
+        <p>Bít tết &amp; những cuộc hẹn</p>
+        <div role="status" aria-live="polite">Đang mở cửa nhà hàng…</div>
+        <button type="button" id="arrival-skip">Vào trang ngay</button>
+      </div>
+    </div>
     <div id="root"></div>
+    <noscript><p>Ngọc Hiếu · Bít tết &amp; những cuộc hẹn. Bật JavaScript để khám phá nhà hàng hoặc <a href="tel:0933446996">gọi đặt bàn: 0933 446 996</a>.</p></noscript>
+    <script>
+      (() => {
+        const shell = document.getElementById('arrival');
+        if (location.pathname !== '/') { shell.remove(); return; }
+        const root = document.getElementById('root');
+        const started = performance.now();
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+        let leaving = false;
+        let revealTimer;
+        let removalTimer;
+        let deadlineTimer;
+        document.documentElement.classList.add('arrival-pending');
+        root.inert = true;
+        const unlock = () => {
+          root.inert = false;
+          document.documentElement.classList.remove('arrival-pending');
+        };
+        const cleanup = () => {
+          unlock();
+          clearTimeout(revealTimer);
+          clearTimeout(removalTimer);
+          clearTimeout(deadlineTimer);
+          window.removeEventListener('appready', ready);
+          window.removeEventListener('pagehide', cleanup);
+          document.removeEventListener('visibilitychange', checkDeadline);
+          shell.remove();
+        };
+        const reveal = () => {
+          if (leaving) return;
+          leaving = true;
+          const hadFocus = shell.contains(document.activeElement);
+          shell.classList.add('is-leaving');
+          shell.setAttribute('aria-hidden', 'true');
+          shell.inert = true;
+          unlock();
+          if (hadFocus) {
+            const target = root.querySelector('.skip-link');
+            if (target) target.focus({ preventScroll: true });
+          }
+          removalTimer = setTimeout(cleanup, reduced.matches ? 0 : 1050);
+        };
+        const ready = () => {
+          clearTimeout(revealTimer);
+          revealTimer = setTimeout(reveal, reduced.matches ? 0 : Math.max(0, 400 - (performance.now() - started)));
+        };
+        const checkDeadline = () => { if (performance.now() - started >= 8000) cleanup(); };
+        document.getElementById('arrival-skip').addEventListener('click', reveal);
+        window.addEventListener('appready', ready);
+        window.addEventListener('pagehide', cleanup);
+        document.addEventListener('visibilitychange', checkDeadline);
+        deadlineTimer = setTimeout(cleanup, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

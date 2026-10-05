@@ -150,7 +150,7 @@ export default function MenuPage() {
       {page.kind === 'contents' ? <div className="notebook-contents-page">
         <span className="notebook-eyebrow">Bít Tết Ngọc Hiếu</span><h2>Một món quen.<br />Một cuộc hẹn.</h2>
         <p>Chọn món, lật trang và cùng thưởng thức.</p>
-        <nav aria-label="Mục lục trong sổ">{menuCategories.map(category => <button type="button" disabled={loading} key={category.name} onClick={() => goTo(category.page)}>{category.name}<span>{String(category.page + 1).padStart(2, '0')} ↗</span></button>)}</nav>
+        <nav aria-label="Mục lục trong sổ">{menuCategories.map(category => <button type="button" disabled={loading} key={category.name} aria-current={menuPages.slice(first, last).some(page => page.category === category.name) ? 'page' : undefined} onClick={() => goTo(category.page)}>{category.name}<span>{String(category.page + 1).padStart(2, '0')} ↗</span></button>)}</nav>
         <p className="notebook-editorial-note">Nhãn “Đề xuất” là gợi ý biên tập, không phải thống kê bán chạy.</p>
       </div> : page.dishes.map(item => <div className="notebook-dish-entry" key={item.id}>
         <button type="button" className="notebook-photo" onClick={() => selectDish(item.id)} aria-label={`Xem ảnh lớn và đặt món ${item.name}`} tabIndex={incoming ? -1 : undefined}>
@@ -167,7 +167,7 @@ export default function MenuPage() {
     <div className="notebook-leaves"><div className="notebook-spread notebook-current">{renderPages(first)}</div>{moving && <div className="notebook-spread notebook-incoming" aria-hidden="true" inert>{renderPages(next, true)}</div>}</div>
   </div>;
 
-  return <div className="menu-notebook">
+  return <div className={`menu-notebook ${showBook ? 'has-book' : 'has-list'}`}>
     <title>Thực đơn | Bít Tết Ngọc Hiếu</title>
     <a className="notebook-skip" href="#notebook">Đến thực đơn</a>
     <header className="notebook-header">
@@ -187,7 +187,7 @@ export default function MenuPage() {
               {item.badge && <span className="notebook-badge">{item.badge}</span>}
               <h3 id={`menu-dish-${item.id}`}>{item.name}</h3>
               <p>{item.description}</p>
-              <div className="notebook-list-order"><strong className="notebook-price">{formatMenuPrice(item.price)}</strong><button type="button" className="notebook-order" aria-label={`Đặt món ${item.name}`} onClick={() => selectDish(item.id)}>Đặt món <span aria-hidden="true">↗</span></button></div>
+              <div className="notebook-list-order"><strong className="notebook-price">{formatMenuPrice(item.price)}</strong><button type="button" className="notebook-order" aria-label={`Xem món ${item.name}`} onClick={() => selectDish(item.id)}>Xem món <span aria-hidden="true">↗</span></button></div>
             </div>
           </article>)}
         </section>)}
@@ -196,15 +196,15 @@ export default function MenuPage() {
         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); turn(event.key === 'ArrowLeft' ? -1 : 1); }
         if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); goTo(event.key === 'Home' ? 0 : menuPages.length - 1); }
       }}>
-        <div className="notebook-toolbar"><nav className="notebook-category-nav" aria-label="Mục lục thực đơn"><button type="button" disabled={loading} onClick={() => goTo(0)} aria-current={first === 0 ? 'page' : undefined}>Mục lục</button>{menuCategories.map(category => <button type="button" disabled={loading} key={category.name} onClick={() => goTo(category.page)}>{category.name}</button>)}</nav><button type="button" className="notebook-sound" aria-pressed={!muted} onClick={() => setMuted(value => !value)}>Âm thanh: {muted ? 'Tắt' : 'Bật'}</button></div>
-        <div id="notebook-pages" aria-busy={busy}>
-          {loading && <p className="notebook-help" role="status">Đang chuẩn bị sổ thực đơn…</p>}
-          {failed ? fallback : <BookBoundary fallback={fallback} onError={fail}><Suspense fallback={fallback}><MenuBook3D ref={book} pages={menuPages} theme={theme} mobile={mobile} reduced={reduced} muted={muted} onPageChange={pageChanged} onBusyChange={setSceneBusy} onDishSelect={selectDish} onError={fail} /></Suspense></BookBoundary>}
+        <div className="notebook-toolbar"><nav className="notebook-category-nav" aria-label="Mục lục thực đơn"><button type="button" disabled={loading} onClick={() => goTo(0)} aria-current={first === 0 ? 'page' : undefined}>Mục lục</button>{menuCategories.map(category => <button type="button" disabled={loading} key={category.name} aria-current={menuPages.slice(first, last).some(page => page.category === category.name) ? 'page' : undefined} onClick={() => goTo(category.page)}>{category.name}</button>)}</nav><button type="button" className="notebook-sound" aria-pressed={!muted} onClick={() => setMuted(value => !value)}>Âm thanh: {muted ? 'Tắt' : 'Bật'}</button></div>
+        <div id="notebook-pages" className={`notebook-stage${failed ? ' is-fallback' : ''}`} aria-busy={busy}>
+          {loading && <div className="notebook-loading" role="status"><span className="notebook-eyebrow">Bít Tết Ngọc Hiếu</span><strong>Một món quen.<br />Một cuộc hẹn.</strong><span>Đang chuẩn bị sổ thực đơn…</span></div>}
+          {failed ? fallback : <BookBoundary fallback={fallback} onError={fail}><Suspense fallback={null}><MenuBook3D ref={book} pages={menuPages} theme={theme} mobile={mobile} reduced={reduced} muted={muted} onPageChange={pageChanged} onBusyChange={setSceneBusy} onDishSelect={selectDish} onError={fail} /></Suspense></BookBoundary>}
         </div>
         <nav className="notebook-controls" aria-label="Lật trang thực đơn">
-          <button type="button" disabled={loading} aria-controls="notebook-pages" aria-disabled={first === 0} onClick={() => turn(-1)}><span aria-hidden="true">←</span> Trang trước</button>
+          <button type="button" disabled={loading || (!busy && first === 0)} aria-controls="notebook-pages" aria-disabled={loading || (!busy && first === 0)} onClick={() => turn(-1)}><span aria-hidden="true">←</span> Trang trước</button>
           <span className="notebook-indicator" role="status" aria-live="polite" aria-atomic="true">Trang {first + 1}{last > first + 1 ? `–${last}` : ''} / {menuPages.length}</span>
-          <button type="button" disabled={loading} aria-controls="notebook-pages" aria-disabled={last === menuPages.length} onClick={() => turn(1)}>Trang sau <span aria-hidden="true">→</span></button>
+          <button type="button" disabled={loading || (!busy && last === menuPages.length)} aria-controls="notebook-pages" aria-disabled={loading || (!busy && last === menuPages.length)} onClick={() => turn(1)}>Trang sau <span aria-hidden="true">→</span></button>
         </nav>
         <p id="notebook-help" className="notebook-help">{failed ? 'Dùng nút lật trang hoặc phím ← / →.' : 'Kéo mép trang bằng chuột hoặc ngón tay; bấm mép trang hoặc dùng phím ← / →.'} Home: mục lục; End: trang cuối. Chọn ảnh để xem món.</p>
         {failed && <p className="notebook-help" role="status">Đang dùng sổ thực đơn nhẹ. Bạn vẫn có thể lật trang, xem món và gọi đặt món.</p>}

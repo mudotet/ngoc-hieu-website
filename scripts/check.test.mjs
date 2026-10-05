@@ -136,6 +136,47 @@ test('bench cushions and backs do not overlap coplanar exterior faces', () => {
   }
 });
 
+test('wall photo lower edges stay above the lounge backrest sightline', async () => {
+  const THREE = await import('three');
+  const source = read('src/RestaurantScene.tsx');
+  const height = Number(source.match(/picture.position.set\(-12.36, ([\d.]+),/)[1]);
+  const backrest = source.match(/box\(accent, \[-12.02, ([\d.]+), -8.3\], \[0.18, ([\d.]+),/);
+  const backTop = Number(backrest[1]) + Number(backrest[2]) / 2;
+  const frameBottom = height - 1.27 / 2;
+  assert.ok(frameBottom > backTop + 0.2);
+  assert.ok(height + 1.27 / 2 < 3.8, 'photo frame must stay below ceiling');
+  const bench = new THREE.Box3(new THREE.Vector3(-12.11, 0.125, -10.4), new THREE.Vector3(-11, backTop, -6.2));
+  for (const camera of [new THREE.Vector3(-7.1, 1.75, -4.8), new THREE.Vector3(-9.15, 1.85, -6)]) {
+    for (const z of [-5.4, -7.5]) {
+      const bottom = new THREE.Vector3(-12.36, frameBottom, z);
+      const ray = new THREE.Ray(camera, bottom.clone().sub(camera).normalize());
+      assert.equal(ray.intersectBox(bench, new THREE.Vector3()), null, 'bench must not block the photo lower edge');
+    }
+  }
+});
+
+test('startup loader releases content for readiness, timeout, skip and menu routes', () => {
+  const html = read('index.html');
+  const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
+  for (const scenario of ['ready', 'timeout', 'skip', 'menu', 'reduced']) {
+    const events = new Map(); const timers = new Map(); let id = 0; let removed = false; let pending = false;
+    const shell = { inert: false, remove: () => { removed = true; }, contains: () => false, setAttribute: () => {}, classList: { add: () => {} } };
+    const root = { inert: false, querySelector: () => null };
+    const skip = { addEventListener: (name, handler) => events.set(`skip:${name}`, handler) };
+    const document = { activeElement: null, getElementById: name => name === 'arrival' ? shell : name === 'root' ? root : skip, documentElement: { classList: { add: () => { pending = true; }, remove: () => { pending = false; } } }, addEventListener: () => {}, removeEventListener: () => {} };
+    const window = { addEventListener: (name, handler) => events.set(name, handler), removeEventListener: name => events.delete(name) };
+    new Function('document', 'window', 'location', 'performance', 'matchMedia', 'setTimeout', 'clearTimeout', script)(document, window, { pathname: scenario === 'menu' ? '/thuc-don' : '/' }, { now: () => 0 }, () => ({ matches: scenario === 'reduced' }), (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, key => timers.delete(key));
+    if (scenario === 'menu') { assert.ok(removed && !root.inert); continue; }
+    assert.ok(pending && root.inert);
+    if (scenario === 'timeout') [...timers.values()].find(timer => timer.ms === 8000).fn();
+    else if (scenario === 'skip') events.get('skip:click')();
+    else { events.get('appready')(); [...timers.values()].find(timer => timer.ms === (scenario === 'reduced' ? 0 : 400)).fn(); }
+    assert.ok(!pending && !root.inert);
+    if (!removed) [...timers.values()].filter(timer => timer.ms === (scenario === 'reduced' ? 0 : 1050)).at(-1).fn();
+    assert.ok(removed);
+  }
+});
+
 test('every menu photograph exists locally', () => {
   const images = [...read('src/content.ts').matchAll(/image: '([^']+)'/g)].map(match => match[1]);
   assert.equal(images.length, 4);
@@ -381,6 +422,50 @@ test('cinematic story exposes seven chapters and truthful booking actions', () =
   assert.match(app, /href="\/thuc-don"/);
   assert.doesNotMatch(app, /5\/5|4\.9\/5|Đặt bàn thành công|window.location.href = href/);
   assert.match(app, /href=\{request\} target="_blank"/);
+});
+
+test('menu book is presented on a full-width stage rather than a small inset', () => {
+  const css = read('src/menu.css');
+  const menu = read('src/MenuPage.tsx');
+  assert.match(menu, /notebook-stage/);
+  assert.match(menu, /notebook-loading/);
+  assert.match(menu, /<Suspense fallback=\{null\}>/);
+  assert.match(css, /70dvh/);
+  assert.match(css, /--notebook-table: var\(--ink\)/);
+  assert.doesNotMatch(css, /--notebook-table: color-mix/);
+  assert.match(menu, /aria-label=\{`Xem món/);
+});
+
+test('book camera fits cover bounds across wide and portrait viewports', async () => {
+  const THREE = await import('three');
+  const source = read('src/MenuBook3D.tsx');
+  const start = source.indexOf('function fitCamera(eased: number) {');
+  const end = source.indexOf('\n      function render', start);
+  assert.ok(start >= 0 && end > start);
+  assert.doesNotMatch(source.slice(start, end), /\btransition\b|moving\.uniforms/);
+  const compiled = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const W = 2.65, H = 3.65;
+  for (const mobile of [false, true]) for (const aspect of [0.55, 1, 1.6, 2.4]) {
+    const camera = new THREE.PerspectiveCamera(34, aspect, 0.1, 100);
+    const direction = new THREE.Vector3(0, 1, 0.2).normalize();
+    const fit = new Function('THREE', 'W', 'H', 'props', 'camera', 'fitPoint', 'viewDirection', 'viewUp', 'opening', 'transition', `${compiled}; return fitCamera;`)(THREE, W, H, { mobile }, camera, new THREE.Vector3(), direction, new THREE.Vector3(0, direction.z, -direction.y), 1, null);
+    fit(1); camera.updateMatrixWorld();
+    for (const x of [mobile ? -0.12 : -W - 0.12, W + 0.12]) for (const y of [-0.22, 0.12]) for (const z of [-H / 2 - 0.12, H / 2 + 0.12]) {
+      const p = new THREE.Vector3(x, y, z).project(camera);
+      assert.ok(Math.abs(p.x) <= 0.95 && Math.abs(p.y) <= 0.95 && p.z > -1 && p.z < 1, `${mobile}/${aspect}: cover clipped`);
+    }
+  }
+});
+
+test('book materials isolate each sheet animation and keep the branded stage transparent', () => {
+  const source = read('src/MenuBook3D.tsx');
+  assert.match(source, /customProgramCacheKey/);
+  assert.match(source, /createSheet\('left'\)/);
+  assert.match(source, /createSheet\('right'\)/);
+  assert.match(source, /createSheet\('moving'\)/);
+  assert.match(source, /ShadowMaterial/);
+  assert.match(source, /alpha: true/);
+  assert.doesNotMatch(source, /scene.background = new THREE.Color\(sceneColors.timber\)/);
 });
 
 test('3D menu remains lazy and provides material and lifecycle safeguards', () => {

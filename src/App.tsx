@@ -39,6 +39,7 @@ function BookingForm() {
 class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { window.dispatchEvent(new Event('appready')); }
   render() { return this.state.failed ? <div className="scene-message">Không thể tải không gian 3D. Bạn vẫn có thể khám phá thực đơn bên dưới.</div> : this.props.children; }
 }
 
@@ -67,6 +68,28 @@ export default function App() {
   const [theme, setTheme] = useTheme();
   const root = useRef<HTMLDivElement>(null);
   const menuToggle = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const element = hero.current;
+    const ready = () => window.dispatchEvent(new Event('appready'));
+    element?.addEventListener('sceneready', ready);
+    if (element?.dataset.sceneReady === 'true') ready();
+    const image = !sceneEnabled ? element?.querySelector<HTMLImageElement>('.mobile-hero-photo img') : null;
+    let active = true;
+    const imageReady = () => {
+      if (image?.decode) image.decode().catch(() => {}).then(() => { if (active) ready(); });
+      else if (active) ready();
+    };
+    image?.addEventListener('load', imageReady, { once: true });
+    image?.addEventListener('error', ready, { once: true });
+    if (image?.complete) imageReady();
+    return () => {
+      active = false;
+      element?.removeEventListener('sceneready', ready);
+      image?.removeEventListener('load', imageReady);
+      image?.removeEventListener('error', ready);
+    };
+  }, [sceneEnabled]);
 
   useEffect(() => {
     const nodes = root.current?.querySelectorAll('.reveal');
