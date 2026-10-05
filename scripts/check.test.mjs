@@ -482,10 +482,32 @@ test('3D menu remains lazy and provides material and lifecycle safeguards', () =
   assert.match(book, /\.dispose\(\)/);
 });
 
+test('folded doors remain against walls rather than projecting across approach paths', async () => {
+  const THREE = await import('three');
+  const source = read('src/RestaurantScene.tsx');
+  const position = source.match(/connectingDoor.position.set\(([^)]+)\)/)[1].split(',').map(Number);
+  const angle = source.match(/connectingDoor.rotation.y = ([^;]+);/)[1];
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.66, 1.94));
+  const hinge = new THREE.Group(); hinge.position.fromArray(position); hinge.rotation.y = new Function(`return ${angle}`)();
+  door.position.set(0, 1.33, 0.94); hinge.add(door); hinge.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(hinge);
+  assert.ok(bounds.max.z < -5.8);
+  assert.ok(bounds.max.x - bounds.min.x < 0.31, 'open connector leaf must lie flat along its wall');
+  for (const side of [-1, 1]) {
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.96, 2.66, 0.3));
+    const pivot = new THREE.Group(); pivot.position.set(-9 + side * 1.12, 0.1, 2.22); pivot.rotation.y = Math.PI;
+    leaf.position.set(-side * 0.48, 1.33, 0); pivot.add(leaf); pivot.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(pivot);
+    assert.ok(side < 0 ? b.max.x < -10 : b.min.x > -8, 'front doors must leave the entire entrance clear');
+  }
+});
+
 test('both restaurant buildings have entrances and a connected interior', () => {
   const source = read('src/RestaurantScene.tsx');
   for (const name of ['left-entrance-door', 'interior-connecting-door', 'backdrop']) assert.ok(source.includes(name), name);
-  assert.match(source, /connectingDoor.position.set\(-5.5, 0.1, -5.96\)/);
+  assert.match(source, /connectingDoor.position.set\(-5.72, 0.1, -5.96\)/);
+  assert.match(source, /connectingDoor.rotation.y = Math.PI;/);
+  assert.match(source, /hinge.rotation.y = Math.PI;/);
   assert.match(source, /new THREE.Fog\(palette.ink, 24, 85\)/);
   assert.match(source, /distanceFog.color.copy\(scene.background\)/);
 });

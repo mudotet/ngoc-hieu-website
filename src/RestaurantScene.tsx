@@ -283,8 +283,8 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         box(doorPaint, [-9 + side * 1.02, 1.43, 2], [0.1, 2.66, 0.2], leftEntrance).name = 'left-entrance-jamb';
         const hinge = new THREE.Group();
         hinge.name = `left-entrance-door-leaf-${side}`;
-        hinge.position.set(-9 + side * 0.97, 0.1, 1.98);
-        hinge.rotation.y = -side * Math.PI / 2;
+        hinge.position.set(-9 + side * 1.12, 0.1, 2.22);
+        hinge.rotation.y = Math.PI;
         leftEntrance.add(hinge);
         for (const y of [0.055, 2.575]) box(doorPaint, [-side * 0.48, y, 0], [0.96, 0.11, 0.1], hinge);
         for (const edge of [0.045, 0.915]) box(doorPaint, [-side * edge, 1.315, 0], [0.09, 2.52, 0.1], hinge);
@@ -297,9 +297,9 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       box(accent, [-9, 2.86, 2.5], [2.7, 0.14, 1.2], leftEntrance).name = 'left-entrance-canopy';
       const connectingDoor = new THREE.Group();
       connectingDoor.name = 'interior-connecting-door';
-      connectingDoor.position.set(-5.5, 0.1, -5.96);
-      connectingDoor.rotation.y = -Math.PI / 2;
-      connectingDoor.userData.openAngle = Math.PI / 2;
+      connectingDoor.position.set(-5.72, 0.1, -5.96);
+      connectingDoor.rotation.y = Math.PI;
+      connectingDoor.userData.openAngle = Math.PI;
       rightBuilding.add(connectingDoor);
       for (const y of [0.055, 2.575]) box(doorPaint, [0, y, 0.94], [0.1, 0.11, 1.88], connectingDoor);
       for (const z of [0.045, 1.835]) box(doorPaint, [0, 1.315, z], [0.1, 2.52, 0.09], connectingDoor);
