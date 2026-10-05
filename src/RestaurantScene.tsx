@@ -12,7 +12,7 @@ import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { palette, sceneColors, type ThemeMode } from './theme';
 import { createTrafficState, stepTraffic, trafficBodies, trafficPose, trafficSignal } from './traffic';
-import { pedestrianLimits, pedestrianRandom, pedestrianRoutes, pedestrianRouteLength, samplePedestrianRoute } from './streetPedestrians';
+import { pedestrianLimits, createPedestrianAgents, stepPedestrians, type PedestrianAppearance } from './streetPedestrians';
 
 declare global {
   interface ImportMeta {
@@ -326,6 +326,50 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       for (const z of [-7.1, -9.3]) {
         box(timber, [-10.1, 0.92, z], [1.1, 0.12, 1.2], leftBuilding).name = 'left-lounge-table';
         box(iron, [-10.1, 0.48, z], [0.12, 0.85, 0.12], leftBuilding);
+      }
+      const leftDiningZone = new THREE.Group();
+      leftDiningZone.name = 'left-dining-zone';
+      leftBuilding.add(leftDiningZone);
+      const leftGalleryLounge = new THREE.Group();
+      leftGalleryLounge.name = 'left-gallery-lounge';
+      leftDiningZone.add(leftGalleryLounge);
+      box(timber, [-12.28, 0.96, -8.3], [0.12, 1.7, 4.4], leftGalleryLounge).name = 'left-gallery-wainscot';
+      box(brass, [-12.19, 1.84, -8.3], [0.06, 0.04, 4.4], leftGalleryLounge).name = 'left-gallery-picture-rail';
+      for (const z of [-7.1, -9.3]) {
+        box(accent, [-9.18, 0.59, z], [0.52, 0.14, 0.62], leftGalleryLounge).name = 'left-gallery-dining-chair';
+        box(timber, [-8.96, 0.93, z], [0.08, 0.54, 0.62], leftGalleryLounge);
+        for (const dz of [-0.22, 0.22]) box(iron, [-9.18, 0.33, z + dz], [0.42, 0.38, 0.055], leftGalleryLounge);
+      }
+      for (const [name, z, length, tableZs] of [
+        ['left-rear-dining-booth', -9.7, 3.35, [-8.85, -10.55]],
+        ['left-window-dining-nook', 0.35, 2.2, [0.35]],
+      ] as const) {
+        const zone = new THREE.Group();
+        zone.name = name;
+        leftDiningZone.add(zone);
+        box(timber, [-6.18, 0.34, z], [0.7, 0.46, length], zone).name = `${name}-banquette`;
+        box(accent, [-6.18, 0.64, z], [0.69, 0.14, length - 0.04], zone);
+        box(accent, [-5.88, 1.02, z], [0.12, 0.58, length - 0.04], zone).name = `${name}-back`;
+        for (const tableZ of tableZs) {
+          box(timber, [-7.04, 0.87, tableZ], [0.82, 0.1, 0.95], zone).name = `${name}-table`;
+          mesh(cylinderGeometry, iron, zone, [-7.04, 0.49, tableZ], [0.055, 0.66, 0.055]);
+          mesh(cylinderGeometry, iron, zone, [-7.04, 0.14, tableZ], [0.27, 0.06, 0.27]);
+          box(bone, [-7.04, 0.927, tableZ], [0.32, 0.014, 0.7], zone).name = `${name}-linen`;
+        }
+        box(timber, [-6.22, 1.62, z], [0.6, 0.065, length - 0.2], zone).name = `${name}-wall-shelf`;
+        for (const dz of [-0.55, 0.55]) {
+          mesh(cylinderGeometry, bone, zone, [-6.14, 1.75, z + dz], [0.105, 0.19, 0.105]).name = `${name}-shelf-ceramic`;
+        }
+        box(brass, [-6.96, 3.46, z], [0.02, 0.56, 0.02], zone).name = `${name}-pendant-stem`;
+        mesh(cylinderGeometry, brass, zone, [-6.96, 3.13, z], [0.36, 0.12, 0.36]).name = `${name}-pendant`;
+        mesh(cylinderGeometry, bone, zone, [-6.96, 3.06, z], [0.32, 0.018, 0.32]);
+      }
+      for (const [x, z] of [[-11.45, -11.15], [-6.35, -7.48]]) {
+        box(timber, [x, 0.4, z], [1.05, 0.56, 0.48], leftDiningZone).name = 'left-low-planter-partition';
+        box(iron, [x, 0.69, z], [0.96, 0.025, 0.39], leftDiningZone);
+        for (const dx of [-0.32, 0, 0.32]) {
+          mesh(cylinderGeometry, accent, leftDiningZone, [x + dx, 0.92, z], [0.15, 0.42, 0.15]).name = 'left-planter-foliage';
+        }
       }
       box(timber, [-10.4, 0.66, -1.4], [2.5, 1.12, 1.1], leftBuilding).name = 'left-reception-counter';
       box(bone, [-10.4, 1.26, -1.4], [2.65, 0.1, 1.24], leftBuilding);
@@ -871,7 +915,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
           }
         }
       }
-      const treePositions = [[-4.1, 2.1], [4.8, -4.75]];
+      const treePositions = [[-4.1, 2.1], [4.9, -56]];
       const treeCrowns: THREE.Group[] = [];
       treePositions.forEach(([x, z], index) => {
         const tree = new THREE.Group();
@@ -926,7 +970,9 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       const clothingPool = new Map<string, THREE.MeshStandardMaterial>();
       const skinPool = [skin, material(new THREE.Color(sceneColors.skin).multiplyScalar(0.77).getStyle()), material(new THREE.Color(sceneColors.skin).lerp(new THREE.Color(palette.cream), 0.25).getStyle())];
       const hairPool = [hair, material(sceneColors.timber), material(sceneColors.mortar)];
-      const person = (color: string, appearance?: { scale: number; width: number; skin: number; hair: number; longHair: boolean }) => {
+      const trouserPool = [trousers, material(sceneColors.iron), material(sceneColors.timber), material(palette.purpleMid)];
+      const accessoryPool = [material(palette.greenMid), material(palette.amber), material(palette.purpleMid)];
+      const person = (color: string, appearance?: PedestrianAppearance) => {
         const body = new THREE.Group();
         scene.add(body);
         let clothing = clothingPool.get(color);
@@ -937,18 +983,38 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         const complexion = appearance ? skinPool[appearance.skin] : skin;
         const hairstyle = appearance ? hairPool[appearance.hair] : hair;
         if (appearance) body.scale.set(appearance.scale * appearance.width, appearance.scale, appearance.scale);
-        mesh(roundedGeometry, clothing, body, [0, 1.07, 0], [0.19, 0.29, 0.13]).name = 'person-garment';
+        const older = appearance?.kind === 'older';
+        const child = appearance?.kind === 'child';
+        const headScale = appearance?.headScale ?? 1;
+        mesh(roundedGeometry, clothing, body, [0, older ? 1.03 : 1.07, 0], [0.19, older ? 0.34 : 0.29, child ? 0.145 : 0.13]).name = 'person-garment';
         mesh(limbGeometry, complexion, body, [0, 1.37, 0], [0.055, 0.04, 0.055]);
-        mesh(headGeometry, complexion, body, [0, 1.48, 0], [1, 1.2, 1]).name = 'person-head';
-        mesh(headGeometry, hairstyle, body, [0, 1.56, -0.025], [1.04, 0.65, 1.02]);
-        if (appearance?.longHair) mesh(roundedGeometry, hairstyle, body, [0, 1.4, -0.095], [0.13, 0.19, 0.06]);
+        mesh(headGeometry, complexion, body, [0, 1.48, older ? 0.025 : 0], [headScale, child ? 1.36 : 1.2, headScale]).name = 'person-head';
+        if (appearance?.hairStyle !== 3) mesh(headGeometry, hairstyle, body, [0, 1.56, -0.025], [headScale * 1.04, appearance?.hairStyle === 2 ? 0.95 : 0.65, headScale * 1.02]);
+        if (appearance?.hairStyle === 1) mesh(roundedGeometry, hairstyle, body, [0, 1.4, -0.095], [0.13, 0.19, 0.06]);
+        if (appearance?.hairStyle === 2) mesh(headGeometry, hairstyle, body, [0, 1.57, -0.14], [0.55, 0.7, 0.6]);
+        if (appearance) {
+          const trim = accessoryPool[appearance.outfit % accessoryPool.length];
+          if (appearance.accessory === 0) {
+            mesh(roundedGeometry, trim, body, [0, 1.1, -0.17], [0.13, 0.19, 0.085]).name = 'person-backpack';
+            for (const side of [-1, 1]) box(trim, [side * 0.115, 1.16, 0.125], [0.025, 0.32, 0.025], body);
+          } else if (appearance.accessory === 1) {
+            mesh(cylinderGeometry, trim, body, [0, 1.65, 0], [0.135, 0.08, 0.135]).name = 'person-hat';
+            mesh(cylinderGeometry, trim, body, [0, 1.61, 0.025], [0.18, 0.018, 0.18]);
+          } else if (appearance.accessory === 2) {
+            mesh(roundedGeometry, trim, body, [0.23, 0.79, 0], [0.06, 0.15, 0.115]).name = 'person-bag';
+            box(trim, [0.19, 1.02, 0], [0.023, 0.35, 0.023], body);
+          } else if (appearance.accessory === 3) {
+            box(trim, [0, 1.28, 0.13], [0.27, 0.055, 0.035], body).name = 'person-scarf';
+            box(trim, [-0.075, 1.14, 0.145], [0.06, 0.26, 0.025], body);
+          }
+        }
         const legs: THREE.Group[] = [];
         const arms: THREE.Group[] = [];
         for (const side of [-1, 1]) {
           const leg = new THREE.Group();
           leg.position.set(side * 0.095, 0.84, 0);
           body.add(leg);
-          mesh(limbGeometry, trousers, leg, [0, -0.35, 0], [0.075, 0.175, 0.08]).name = 'person-leg';
+          mesh(limbGeometry, appearance ? trouserPool[appearance.trousers] : trousers, leg, [0, -0.35, 0], [0.075, 0.175, 0.08]).name = 'person-leg';
           mesh(roundedGeometry, shoe, leg, [0, -0.735, 0.04], [0.08, 0.055, 0.145]);
           legs.push(leg);
           const arm = new THREE.Group();
@@ -1047,30 +1113,17 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
       mesh(roundedGeometry, bone, chef.body, [0, 1.77, 0], [0.18, 0.11, 0.15]);
       chef.arms[0].name = 'chef-cooking-arm';
       box(brass, [0, -0.64, 0.03], [0.035, 0.3, 0.035], chef.arms[0]).name = 'chef-spatula';
-      const residentRandom = pedestrianRandom();
+      const residentSeed = crypto.getRandomValues(new Uint32Array(1))[0];
+      const pedestrianAgents = createPedestrianAgents(quality > 0 ? pedestrianLimits.desktop : pedestrianLimits.economy, residentSeed);
+      container.dataset.pedestrianSeed = String(residentSeed);
+      container.dataset.pedestrianCount = String(pedestrianAgents.length);
       const outfits = [palette.paper, palette.greenMid, palette.purpleMid, palette.cream, sceneColors.timber, sceneColors.trousers];
-      const residents = Array.from({ length: quality > 0 ? pedestrianLimits.desktop : pedestrianLimits.economy }, (_, index) => {
-        const child = index === 5 || index === 9 || index === 15;
-        const scale = child ? 0.62 + residentRandom() * 0.12 : 0.94 + residentRandom() * 0.18;
-        const resident = person(outfits[Math.floor(residentRandom() * outfits.length)], {
-          scale, width: 0.88 + residentRandom() * 0.2,
-          skin: Math.floor(residentRandom() * skinPool.length), hair: Math.floor(residentRandom() * hairPool.length), longHair: index % 3 === 0,
-        });
-        const route = pedestrianRoutes[index === 2 || index === 7 ? 0 : index % pedestrianRoutes.length];
-        const jogging = index === 1 || index === 6 || index === 12;
-        resident.body.name = `pedestrian-${index}`;
-        return { ...resident, route, scale, child, jogging, companion: child ? index - 1 : -1, exercise: index === 7,
-          speed: jogging ? 1.35 + residentRandom() * 0.2 : 0.52 + residentRandom() * 0.2,
-          distance: index === 2 ? 44 : index === 7 ? 33 : residentRandom() * pedestrianRouteLength(route),
-          point: { x: 0, z: 0, heading: 0 },
-        };
-      });
-      residents.forEach(resident => {
-        if (resident.companion < 0) return;
-        const adult = residents[resident.companion];
-        resident.route = adult.route;
-        resident.speed = adult.speed;
-        resident.distance = adult.distance - 0.7;
+      const residents = pedestrianAgents.map((agent, index) => {
+        const resident = person(outfits[agent.appearance.outfit], agent.appearance);
+        resident.body.name = `pedestrian-${index}-${agent.appearance.kind}`;
+        resident.body.position.set(agent.x, agent.ground, agent.z);
+        resident.body.rotation.y = agent.heading;
+        return { ...resident, agent };
       });
       const pedestrianFrustum = new THREE.Frustum();
       const pedestrianProjection = new THREE.Matrix4();
@@ -1552,22 +1605,22 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
         camera.updateMatrixWorld();
         pedestrianProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
         pedestrianFrustum.setFromProjectionMatrix(pedestrianProjection);
+        if (!reduced) stepPedestrians(pedestrianAgents, renderDelta);
         residents.forEach((resident, index) => {
-          const distance = resident.distance + walkingTime * (resident.exercise ? 0 : resident.speed);
-          const point = samplePedestrianRoute(resident.route, distance, resident.point);
-          resident.body.position.set(point.x, resident.route.ground, point.z);
-          resident.body.rotation.y = point.heading;
-          pedestrianSphere.center.set(point.x, 0.9, point.z);
+          const agent = resident.agent;
+          const jogging = agent.appearance.kind === 'jogger';
+          resident.body.position.set(agent.x, agent.ground, agent.z);
+          resident.body.rotation.y = agent.heading;
+          pedestrianSphere.center.set(agent.x, 0.9, agent.z);
           resident.body.visible = (quality > 0 || index < pedestrianLimits.economy) && pedestrianFrustum.intersectsSphere(pedestrianSphere);
           if (!resident.body.visible) return;
-          const cadence = resident.speed / resident.scale * (resident.jogging ? 6 : 7);
-          const stride = reduced || resident.exercise ? 0 : Math.sin(walkingTime * cadence + resident.distance) * (resident.jogging ? 0.62 : 0.34);
-          resident.body.position.y += reduced ? 0 : Math.abs(stride) * (resident.jogging ? 0.09 : 0.045);
-          resident.body.rotation.x = resident.jogging ? 0.09 : 0;
+          const stride = reduced ? 0 : Math.sin(agent.phase) * (jogging ? 0.42 : 0.34) * agent.moving;
+          resident.body.position.y += Math.abs(stride) * (jogging ? 0.09 : 0.045);
+          resident.body.rotation.x = jogging ? 0.09 : agent.appearance.kind === 'older' ? 0.045 : 0;
           resident.legs.forEach((leg, side) => { leg.rotation.x = side ? stride : -stride; });
           resident.arms.forEach((arm, side) => {
-            arm.rotation.x = (side ? -stride : stride) * 0.8 - (resident.jogging ? 0.65 : 0);
-            arm.rotation.z = resident.exercise ? (side ? 1 : -1) * (1.8 + (reduced ? 0 : Math.sin(walkingTime * 0.7) * 0.35)) : 0;
+            arm.rotation.x = (side ? -stride : stride) * 0.8 - (jogging ? 0.65 : 0);
+            arm.rotation.z = 0;
           });
         });
         treeCrowns.forEach((tree, index) => { tree.rotation.z = reduced ? 0 : Math.sin(walkingTime * 0.7 + index) * 0.009; });
@@ -1579,7 +1632,7 @@ export default function RestaurantScene({ entered = false, onEntered, theme, tou
           leaf.rotation.set(index + walkingTime * 0.35, walkingTime * 0.45 + index, Math.sin(walkingTime + index) * 0.4);
         });
         const walker = residents[2];
-        dog.position.set(walker.body.position.x, walker.route.ground, walker.body.position.z + 0.38);
+        dog.position.set(walker.body.position.x, walker.agent.ground, walker.body.position.z + 0.38);
         dog.visible = walker.body.visible;
         leash.visible = walker.body.visible;
         dog.rotation.y = walker.body.rotation.y;

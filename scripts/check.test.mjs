@@ -194,6 +194,32 @@ test('actual furniture leaves 1.5m connector approaches and main hallway clear',
   assert.deepEqual(collisions, []);
 });
 
+test('new left dining zones preserve camera clearance and photo sightlines', async () => {
+  const { THREE, scene } = await connectorGeometry();
+  const zone = scene.getObjectByName('left-dining-zone');
+  assert.ok(zone);
+  for (const name of ['left-gallery-lounge', 'left-rear-dining-booth', 'left-window-dining-nook']) assert.ok(zone.getObjectByName(name));
+  const boxes = [];
+  zone.traverse(object => { if (object.isMesh) boxes.push(new THREE.Box3().setFromObject(object)); });
+  const source = read('src/RestaurantScene.tsx');
+  const stages = new Function('THREE', `return ${source.match(/const stages = (\[[\s\S]*?\n\s*\]);/)[1]}`)(THREE);
+  const knots = new Function('THREE', 'stages', `return ${source.match(/const cameraKnots = (\[[\s\S]*?\n\s*\]);/)[1]}`)(THREE, stages);
+  const curve = new THREE.CatmullRomCurve3(knots.map(knot => knot.position), false, 'catmullrom', 0.12);
+  for (let i = 0; i <= 3000; i++) {
+    const p = curve.getPoint(i / 3000);
+    for (const box of boxes) assert.ok(!box.clone().expandByScalar(0.18).containsPoint(p), 'new furniture must clear moving camera');
+  }
+  for (const z of [-5.4, -7.5]) {
+    const photo = new THREE.Vector3(-12.36, 2.345, z);
+    const origin = stages.find(stage => stage.name === 'feedback').position;
+    const ray = new THREE.Ray(origin, photo.clone().sub(origin).normalize());
+    for (const box of boxes) {
+      const hit = ray.intersectBox(box, new THREE.Vector3());
+      assert.ok(!hit || hit.distanceTo(origin) > photo.distanceTo(origin), 'new decoration must not obscure photo');
+    }
+  }
+});
+
 test('actual connector trim and folded leaf have no overlapping coplanar exposed faces', async () => {
   const { THREE, rightBuilding, connectingDoor } = await connectorGeometry();
   const boxes = rightBuilding.children.filter(object => object.isMesh && object.position.x === -5.5);
@@ -313,6 +339,36 @@ test('pedestrian routes cover both streets and turn without teleporting', () => 
       previous = current;
     }
   }
+});
+
+test('pedestrians choose varied safe destinations and keep children near adults', () => {
+  const module = { exports: {} };
+  const compiled = ts.transpileModule(read('src/streetPedestrians.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('module', 'exports', compiled)(module, module.exports);
+  const { createPedestrianAgents, stepPedestrians, isPedestrianPositionSafe } = module.exports;
+  const a = createPedestrianAgents(18, 42), b = createPedestrianAgents(18, 42);
+  assert.deepEqual(a, b);
+  assert.notDeepEqual(a, createPedestrianAgents(18, 43));
+  assert.equal(new Set(a.map(person => JSON.stringify(person.appearance))).size, 18);
+  const targets = a.map(() => new Set()); let stopped = 0;
+  for (let frame = 0; frame < 60 * 300; frame++) {
+    const before = a.map(person => [person.x, person.z]);
+    stepPedestrians(a, 1 / 60);
+    for (const [index, person] of a.entries()) {
+      assert.ok(isPedestrianPositionSafe(person.x, person.z), `unsafe destination ${index}`);
+      assert.ok(Math.hypot(person.x - before[index][0], person.z - before[index][1]) < 0.07, 'no teleport');
+      assert.ok(Number.isFinite(person.heading)); targets[index].add(person.target);
+      if (person.wait > 0) stopped++;
+      if (person.companion >= 0) {
+        const adult = a[person.companion];
+        assert.ok(Math.hypot(person.x - adult.x, person.z - adult.z) < 2, 'child must remain with adult');
+      }
+    }
+  }
+  assert.ok(stopped > 100);
+  for (const [index, person] of a.entries()) if (person.companion < 0) assert.ok(targets[index].size > 4, `pedestrian ${index} needs diverse destinations`);
+  assert.throws(() => createPedestrianAgents(19, 1), RangeError);
+  assert.throws(() => stepPedestrians(a, NaN), RangeError);
 });
 
 test('left cashier stands behind the counter facing the entrance', () => {
