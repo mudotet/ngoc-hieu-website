@@ -493,6 +493,9 @@ test('responsive layout restores its visible section after pin removal', () => {
   const app = read('src/App.tsx');
   assert.match(app, /main > \.pin-spacer > section\[id\]/);
   assert.match(app, /section.id === 'home' \? 0 : section.getBoundingClientRect\(\).top/);
+  assert.match(app, /window.scrollY >= start && window.scrollY <= end/);
+  assert.match(app, /if \(section\?\.id === 'home'\) window.scrollTo\(\{ top: 0, behavior: 'instant' \}\)/);
+  assert.match(read('src/RestaurantScene.tsx'), /chapter.dataset.storyStart = String\(trigger.start\)/);
   const body = app.match(/useLayoutEffect\(\(\) => \{([\s\S]*?)\}, \[mobile\]\)/)[1];
   for (const anchor of [{ id: 'home', top: 0 }, { id: 'dat-ban', top: 70 }]) {
     let scroll = null;
@@ -501,6 +504,35 @@ test('responsive layout restores its visible section after pin removal', () => {
     assert.equal(scroll, anchor.id === 'home' ? 0 : 530);
     assert.equal(ref.current, null);
   }
+});
+
+test('breakpoint changes use stored pin bounds before CSS can hide the hero', () => {
+  const app = read('src/App.tsx');
+  const body = app.match(/const change = \(\) => \{([\s\S]*?)\n    \};/)[1];
+  const change = new Function('document', 'window', 'resizeAnchor', 'media', 'setMobile', 'setChapter', 'requestedChapter', ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+  const home = { id: 'home', dataset: { storyStart: '0', storyEnd: '4500' }, getBoundingClientRect: () => ({ top: -1575, bottom: -600 }) };
+  const lower = { id: 'dat-ban', getBoundingClientRect: () => ({ top: 80, bottom: 500 }) };
+  for (const inside of [true, false]) {
+    const anchor = { current: null }; const order = [];
+    change({ getElementById: () => home, querySelectorAll: () => [lower] }, { scrollY: inside ? 1575 : 5000, scrollTo: value => order.push(['scroll', value.top]) }, anchor, { matches: true }, () => order.push(['mobile']), () => {}, { current: 2 });
+    assert.equal(anchor.current.id, inside ? 'home' : 'dat-ban');
+    assert.deepEqual(order, inside ? [['scroll', 0], ['mobile']] : [['mobile']]);
+  }
+});
+
+test('mobile scene cleanup preserves the React-owned selected journey', () => {
+  const source = read('src/RestaurantScene.tsx');
+  const statement = source.split('\n').find(line => line.includes('delete chapter.dataset.journey'));
+  assert.ok(statement);
+  const clean = new Function('chapter', 'tourMode', statement);
+  for (const journey of ['signature', 'menu']) {
+    const chapter = { dataset: { journey } };
+    clean(chapter, 'steps');
+    assert.equal(chapter.dataset.journey, journey, 're-enabling 3D must retain the selected mobile scene');
+  }
+  const chapter = { dataset: { journey: 'outside' } };
+  clean(chapter, 'scroll');
+  assert.equal(chapter.dataset.journey, undefined);
 });
 
 test('mobile menu defaults to a list and makes the book opt-in', () => {

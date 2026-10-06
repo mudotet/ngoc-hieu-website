@@ -149,8 +149,13 @@ export default function App() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
     const change = () => {
-      const section = [...document.querySelectorAll<HTMLElement>('main > section[id], main > .pin-spacer > section[id]')].find(element => element.getBoundingClientRect().bottom > 80);
+      const home = document.getElementById('home');
+      const start = Number(home?.dataset.storyStart);
+      const end = Number(home?.dataset.storyEnd);
+      const inJourney = Number.isFinite(start) && Number.isFinite(end) && window.scrollY >= start && window.scrollY <= end;
+      const section = inJourney ? home : [...document.querySelectorAll<HTMLElement>('main > section[id], main > .pin-spacer > section[id]')].find(element => element.getBoundingClientRect().bottom > 80);
       if (section) resizeAnchor.current = { id: section.id, top: section.id === 'home' ? 0 : section.getBoundingClientRect().top };
+      if (section?.id === 'home') window.scrollTo({ top: 0, behavior: 'instant' });
       setMobile(media.matches);
       setChapter(0); requestedChapter.current = 0;
     };

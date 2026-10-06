@@ -102,7 +102,7 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
       renderer?.dispose();
       renderer?.forceContextLoss();
       renderer?.domElement.remove();
-      delete chapter.dataset.journey;
+      if (tourMode === 'scroll') delete chapter.dataset.journey;
       delete chapter.dataset.progress;
       chapter.style.removeProperty('--story-progress');
       for (const name of ['quality', 'fps', 'environment', 'drawCalls', 'triangles', 'renderedFps', 'pixelRatio', 'batchedMeshes', 'lighting', 'exposure', 'aoIntensity']) delete container.dataset[name];
@@ -1895,7 +1895,7 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
         if (reduced && tourMode === 'steps') gsap.getTweensOf(progress).forEach(tween => { tween.progress(1).kill(); });
         syncAnimation();
         if (reduced || tourMode === 'steps') return;
-        const tween = gsap.fromTo(progress, { value: 0 }, { value: 1, ease: 'none', scrollTrigger: { trigger: chapter, start: 'top top', end: () => `+=${innerHeight * (context.conditions?.desktop ? 5 : 4)}`, pin: true, scrub: 1, invalidateOnRefresh: true } });
+        const tween = gsap.fromTo(progress, { value: 0 }, { value: 1, ease: 'none', scrollTrigger: { trigger: chapter, start: 'top top', end: () => `+=${innerHeight * (context.conditions?.desktop ? 5 : 4)}`, pin: true, scrub: 1, invalidateOnRefresh: true, onRefresh: trigger => { chapter.dataset.storyStart = String(trigger.start); chapter.dataset.storyEnd = String(trigger.end); } } });
         journeyTrigger = tween.scrollTrigger;
         return () => { journeyTrigger = undefined; };
       }, chapter);
