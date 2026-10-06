@@ -427,8 +427,8 @@ test('mobile homepage makes 3D optional and keeps details collapsed', () => {
   assert.match(app, /mobile \? <MobileJourney theme=\{theme\}/);
   assert.match(app, /tourMode="steps"/);
   assert.match(app, /mobile-cinema-photo/);
-  assert.match(app, /device.hardwareConcurrency >= 4/);
-  assert.match(app, /device.deviceMemory >= 4/);
+  assert.match(app, /const manualMode = useRef\(false\)/);
+  assert.match(app, /Khám phá 3D/);
   assert.match(app, /motion.matches \|\| Boolean\(device.connection\?\.saveData\)/);
   assert.match(app, /mobile-bottom-nav/);
   assert.match(app, /move\(requestedStage.current \+ 1\)/);
@@ -446,21 +446,39 @@ test('mobile homepage makes 3D optional and keeps details collapsed', () => {
   assert.match(scene, /tourMode === 'steps' && requestedStage >= 0/);
 });
 
-test('mobile auto-3D respects hardware and motion preferences', () => {
+test('mobile starts with photos and requires explicit 3D consent', () => {
   const source = read('src/App.tsx');
-  const policy = source.match(/setEnabled\((!limited && \(manualMode.current[^;]+)\);/)[1];
-  const evaluate = new Function('device', 'limited', 'manualMode', `return ${policy}`);
-  const eligible = (device, limited) => evaluate(device, limited, { current: null });
-  assert.equal(evaluate({ hardwareConcurrency: 8, deviceMemory: 8 }, false, { current: false }), false);
-  assert.equal(evaluate({ hardwareConcurrency: 2 }, false, { current: true }), true);
-  assert.equal(evaluate({ hardwareConcurrency: 8, deviceMemory: 8 }, true, { current: true }), false);
-  assert.equal(eligible({ hardwareConcurrency: 8, deviceMemory: 8 }, false), true);
-  for (const device of [{ hardwareConcurrency: 2, deviceMemory: 8 }, { hardwareConcurrency: 8, deviceMemory: 2 }, { hardwareConcurrency: 8 }]) assert.equal(eligible(device, false), false);
-  assert.equal(eligible({ hardwareConcurrency: 8, deviceMemory: 8 }, true), false);
+  const policy = source.match(/setEnabled\((!limited && manualMode.current)\);/)[1];
+  const evaluate = new Function('limited', 'manualMode', `return ${policy}`);
+  assert.equal(evaluate(false, { current: false }), false);
+  assert.equal(evaluate(false, { current: true }), true);
+  assert.equal(evaluate(true, { current: true }), false);
+  assert.doesNotMatch(source, /device.hardwareConcurrency|device.deviceMemory >=/);
   assert.match(source, /Math.abs\(dx\) > Math.abs\(dy\) \* 1.5/);
   assert.match(source, /Math.abs\(event.touches\[0\].clientY - touch.current.y\) > 28/);
   const scene = read('src/RestaurantScene.tsx');
   assert.equal((scene.match(/unavailable.current\?\.\(\)/g) || []).length, 2);
+});
+
+test('portrait camera stays below the roof and uses separate close-ups', () => {
+  const module = { exports: {} };
+  const compiled = ts.transpileModule(read('src/mobileCamera.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('module', 'exports', compiled)(module, module.exports);
+  const { mobileCamera } = module.exports;
+  for (const journey of ['outside', 'signature', 'menu']) {
+    const reference = mobileCamera(journey, 1);
+    for (const aspect of [0.35, 0.5, 0.75, 1, 1.5, NaN, 0]) {
+      const shot = mobileCamera(journey, aspect);
+      assert.deepEqual(shot.position, reference.position, 'portrait framing must not raise camera through ceiling');
+      assert.ok(shot.position[1] < 3);
+      assert.ok(shot.fov >= 40 && shot.fov <= 85);
+      assert.ok(shot.position.every(Number.isFinite) && shot.look.every(Number.isFinite));
+    }
+  }
+  assert.equal(mobileCamera('outside', 0.5).stageIndex, 0);
+  assert.equal(mobileCamera('signature', 0.5).stageIndex, 2);
+  assert.equal(mobileCamera('menu', 0.5).stageIndex, 4);
+  assert.equal(mobileCamera(undefined, 0.5).stageIndex, 0);
 });
 
 test('mobile menu defaults to a list and makes the book opt-in', () => {

@@ -11,6 +11,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { palette, sceneColors, type ThemeMode } from './theme';
+import { mobileCamera } from './mobileCamera';
 import { createTrafficState, stepTraffic, trafficBodies, trafficPose, trafficSignal } from './traffic';
 import { pedestrianLimits, createPedestrianAgents, stepPedestrians, type PedestrianAppearance } from './streetPedestrians';
 
@@ -120,6 +121,7 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
 
     try {
       const mobile = matchMedia('(max-width: 899px), (pointer: coarse)').matches;
+      const mobileSteps = mobile && tourMode === 'steps';
       const weak = (navigator.hardwareConcurrency || 4) <= 4;
       let quality = mobile || weak ? 0 : 1;
       const targetFps = mobile ? 30 : 60;
@@ -1475,6 +1477,16 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
       });
       const buildingBounds = buildingBodies.map(object => ({ name: object.name || object.parent?.name || object.parent?.parent?.name || 'restaurant-wall', bounds: new THREE.Box3().setFromObject(object) }));
       const detailBounds = streetDetails.flatMap(detail => detail.positions.map((position, index) => new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(...position), new THREE.Vector3(...detail.scales[index]))));
+      for (const journey of ['outside', 'signature', 'menu']) {
+        for (const aspect of [390 / 844, 390 / 420, 844 / 390]) {
+          const shot = mobileCamera(journey, aspect);
+          const point = new THREE.Vector3(...shot.position);
+          const collision = buildingBounds.find(({ bounds }) => bounds.distanceToPoint(point) < 0.18);
+          console.assert(!collision, `[mobile-camera-building-clearance] ${journey}: ${collision?.name} intersects the 0.18m camera envelope`);
+          console.assert(detailBounds.every(bounds => bounds.distanceToPoint(point) >= 0.18), `[mobile-camera-detail-clearance] ${journey} must clear street trim`);
+          console.assert(journey === 'outside' || point.y <= 2.5, '[mobile-camera-ceiling-clearance] Interior shots must remain below ceiling height');
+        }
+      }
       const sample = new THREE.Vector3();
       const frontageFocus = new THREE.Vector3(0, 1.65, 2.6);
       const frontageRay = new THREE.Ray();
@@ -1583,7 +1595,8 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
           chapter.dataset.progress = progressText;
           chapter.style.setProperty('--story-progress', progressText);
         }
-        const stageIndex = Math.min(6, Math.floor(value * 7));
+        const mobileShot = mobileSteps ? mobileCamera(chapter.dataset.journey, camera.aspect) : null;
+        const stageIndex = mobileShot?.stageIndex ?? Math.min(6, Math.floor(value * 7));
         const stage = stages[stageIndex];
         if (tourMode === 'scroll' && chapter.dataset.journey !== stage.name) {
           chapter.dataset.journey = stage.name;
@@ -1656,9 +1669,18 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
         const to = cameraKnots[segment + 1];
         const blend = THREE.MathUtils.clamp((value - from.at) / (to.at - from.at), 0, 1);
         const curveProgress = (segment + blend) / (cameraKnots.length - 1);
-        cameraCurve.getPoint(curveProgress, camera.position);
-        if (segment === 0) camera.position.y += stages[0].position.y * (Math.max(1, 0.95 / camera.aspect) - 1) * (1 - blend);
-        lookCurve.getPoint(curveProgress, target);
+        if (mobileShot) {
+          camera.position.fromArray(mobileShot.position);
+          target.fromArray(mobileShot.look);
+          if (camera.fov !== mobileShot.fov) {
+            camera.fov = mobileShot.fov;
+            camera.updateProjectionMatrix();
+          }
+        } else {
+          cameraCurve.getPoint(curveProgress, camera.position);
+          if (segment === 0) camera.position.y += stages[0].position.y * (Math.max(1, 0.95 / camera.aspect) - 1) * (1 - blend);
+          lookCurve.getPoint(curveProgress, target);
+        }
         camera.lookAt(target);
         const finale = THREE.MathUtils.smoothstep(value, 0.88, 1);
         finaleLogo.visible = Boolean(finaleMaterial.map) && finale > 0;
@@ -1823,7 +1845,12 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
         if (!Number.isInteger(index) || index < 0 || index > 6) return;
         const value = index === 0 ? 0 : index === 6 ? 1 : (index + 0.5) / 7;
         if (tourMode === 'steps') {
-          tweenProgress(value);
+          if (mobileSteps) {
+            gsap.killTweensOf(progress);
+            progress.value = stages[mobileCamera(chapter.dataset.journey, camera.aspect).stageIndex].at;
+            smoothedProgress = progress.value;
+            render();
+          } else tweenProgress(value);
           return;
         }
         if (!journeyTrigger) gsap.killTweensOf(progress);
@@ -1834,7 +1861,7 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
       };
       const requestedStage = stages.findIndex(stage => stage.name === chapter.dataset.journey);
       if (tourMode === 'steps' && requestedStage >= 0) {
-        progress.value = requestedStage === 0 ? 0 : requestedStage === 6 ? 1 : (requestedStage + 0.5) / 7;
+        progress.value = mobileSteps ? stages[mobileCamera(chapter.dataset.journey, camera.aspect).stageIndex].at : requestedStage === 0 ? 0 : requestedStage === 6 ? 1 : (requestedStage + 0.5) / 7;
         smoothedProgress = progress.value;
       }
       chapter.addEventListener('storyseek', seekChapter);

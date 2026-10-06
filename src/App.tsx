@@ -54,7 +54,7 @@ function MobileJourney({ theme }: { theme: ThemeMode }) {
   const details = useRef<HTMLDetailsElement>(null);
   const scene = mobileScenes[stage];
   const requestedStage = useRef(0);
-  const manualMode = useRef<boolean | null>(null);
+  const manualMode = useRef(false);
 
   useEffect(() => {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -63,7 +63,7 @@ function MobileJourney({ theme }: { theme: ThemeMode }) {
       const limited = motion.matches || Boolean(device.connection?.saveData);
       setRestricted(limited);
       if (limited) setReady(false);
-      setEnabled(!limited && (manualMode.current ?? (device.hardwareConcurrency >= 4 && typeof device.deviceMemory === 'number' && device.deviceMemory >= 4)));
+      setEnabled(!limited && manualMode.current);
     };
     update();
     motion.addEventListener('change', update);
@@ -111,7 +111,7 @@ function MobileJourney({ theme }: { theme: ThemeMode }) {
     }}>
     <figure className="mobile-cinema-photo" key={scene.image}><img src={`/images/${scene.image}`} alt={scene.alt} width="700" height="935" fetchPriority={stage === 0 ? 'high' : 'auto'} onLoad={() => window.dispatchEvent(new Event('appready'))} onError={() => window.dispatchEvent(new Event('appready'))} /></figure>
     {enabled && !failed ? <div className="hero-visual mobile-cinema-scene" data-ready={ready}><SceneBoundary onUnavailable={unavailable}><Suspense fallback={null}><RestaurantScene theme={theme} tourMode="steps" onUnavailable={unavailable} /></Suspense></SceneBoundary></div> : null}
-    <div className="mobile-cinema-tools"><span>{enabled ? ready ? 'Không gian 3D minh họa' : 'Ảnh thật · Đang tải 3D' : 'Ảnh từ nhà hàng'}</span>{!restricted && !failed ? <button type="button" aria-pressed={enabled} onClick={() => { manualMode.current = !enabled; setReady(false); setEnabled(!enabled); }}>{enabled ? 'Dùng ảnh' : 'Bật 3D'}</button> : null}</div>
+    <div className="mobile-cinema-tools"><span>{enabled ? ready ? 'Không gian 3D minh họa' : 'Ảnh thật · Đang tải 3D' : 'Ảnh từ nhà hàng'}</span>{!restricted && !failed ? <button type="button" aria-pressed={enabled} onClick={() => { manualMode.current = !enabled; setReady(false); setEnabled(!enabled); }}>{enabled ? 'Dùng ảnh' : 'Khám phá 3D'}</button> : null}</div>
     <div className="mobile-cinema-content">
       <div className="mobile-cinema-heading" aria-live="polite" aria-atomic="true"><span className="mobile-cinema-count">0{stage + 1} / 03 · {scene.label}</span><h1>{scene.headline}</h1></div>
       {stage === 0 ? <button className="button" type="button" onClick={() => move(1)}>Khám phá chảo nóng <ArrowRight size={18} /></button> : stage === 1 ? <a className="button" href="#dat-ban">Hẹn một bữa ngon <ArrowUpRight size={18} /></a> : <a className="button story-menu-link" href="/thuc-don">Mở quyển thực đơn <ArrowUpRight size={18} /></a>}
