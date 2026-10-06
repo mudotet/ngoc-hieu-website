@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -49,7 +49,7 @@ export default function RestaurantScene({ entered = false, onEntered, onUnavaila
     applyTheme.current?.(theme);
   }, [theme]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = host.current;
     const chapter = container?.closest<HTMLElement>('.hero');
     if (!container || !chapter) return;

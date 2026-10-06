@@ -481,6 +481,28 @@ test('portrait camera stays below the roof and uses separate close-ups', () => {
   assert.equal(mobileCamera(undefined, 0.5).stageIndex, 0);
 });
 
+test('pinned scene reverts synchronously before React removes its parent', () => {
+  const source = read('src/RestaurantScene.tsx');
+  assert.match(source, /useLayoutEffect\(\(\) => \{\s*const container = host.current/);
+  assert.doesNotMatch(source, /useEffect\(\(\) => \{\s*const container = host.current/);
+  assert.match(source, /media.revert\(\)/);
+  assert.match(source, /return cleanup;\s*\}, \[tourMode\]\)/);
+});
+
+test('responsive layout restores its visible section after pin removal', () => {
+  const app = read('src/App.tsx');
+  assert.match(app, /main > \.pin-spacer > section\[id\]/);
+  assert.match(app, /section.id === 'home' \? 0 : section.getBoundingClientRect\(\).top/);
+  const body = app.match(/useLayoutEffect\(\(\) => \{([\s\S]*?)\}, \[mobile\]\)/)[1];
+  for (const anchor of [{ id: 'home', top: 0 }, { id: 'dat-ban', top: 70 }]) {
+    let scroll = null;
+    const ref = { current: anchor };
+    new Function('resizeAnchor', 'document', 'window', body)(ref, { getElementById: () => ({ getBoundingClientRect: () => ({ top: anchor.id === 'home' ? 4500 : -900 }) }) }, { scrollY: 1500, scrollTo: options => { scroll = options.top; } });
+    assert.equal(scroll, anchor.id === 'home' ? 0 : 530);
+    assert.equal(ref.current, null);
+  }
+});
+
 test('mobile menu defaults to a list and makes the book opt-in', () => {
   const menu = read('src/MenuPage.tsx');
   assert.match(menu, /\[mobileBook, setMobileBook\] = useState\(false\)/);

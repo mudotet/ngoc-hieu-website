@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ForkKnife, List, MapPin, Moon, Phone, Sun, X } from '@phosphor-icons/react';
 import { branches, dishes } from './content';
@@ -136,10 +136,21 @@ export default function App() {
   const chapterDetails = useRef<HTMLDetailsElement>(null);
   const requestedChapter = useRef(0);
   const sceneEnabled = !mobile;
+  const resizeAnchor = useRef<{ id: string; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const anchor = resizeAnchor.current;
+    if (!anchor) return;
+    resizeAnchor.current = null;
+    const target = document.getElementById(anchor.id);
+    if (target) window.scrollTo({ top: anchor.id === 'home' ? 0 : Math.max(0, window.scrollY + target.getBoundingClientRect().top - anchor.top), behavior: 'instant' });
+  }, [mobile]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
     const change = () => {
+      const section = [...document.querySelectorAll<HTMLElement>('main > section[id], main > .pin-spacer > section[id]')].find(element => element.getBoundingClientRect().bottom > 80);
+      if (section) resizeAnchor.current = { id: section.id, top: section.id === 'home' ? 0 : section.getBoundingClientRect().top };
       setMobile(media.matches);
       setChapter(0); requestedChapter.current = 0;
     };
